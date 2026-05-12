@@ -1,0 +1,22 @@
+"Timestamp","UserUPN","UserId","Step","StepLabel","Status","Message"
+,,,,,,
+"2026-05-12 10:45:25","Bob@robinm365lab.myo365.site","ee6cc41c-60d8-401a-8fbc-aeda4a1a1a75","ConvertSharedMailbox","Convert to Shared Mailbox","Success","Mailbox converted to Shared; FullAccess granted to AdeleV@robinm365lab.onmicrosoft.com; SendAs granted to AdeleV@robinm365lab.onmicrosoft.com"
+"2026-05-12 10:45:45","Bob@robinm365lab.myo365.site","ee6cc41c-60d8-401a-8fbc-aeda4a1a1a75","SetOutOfOffice","Set Out of Office","Success","Out-of-office auto-reply enabled (internal and external)"
+"2026-05-12 10:45:49","Bob@robinm365lab.myo365.site","ee6cc41c-60d8-401a-8fbc-aeda4a1a1a75","SecureDevice","SecureDevice","Skipped","Step disabled by operator"
+"2026-05-12 10:45:49","Bob@robinm365lab.myo365.site","ee6cc41c-60d8-401a-8fbc-aeda4a1a1a75","RemoveLicenses","Remove All Licences","Success","2 licence(s) removed"
+"2026-05-12 10:45:50","Bob@robinm365lab.myo365.site","ee6cc41c-60d8-401a-8fbc-aeda4a1a1a75","CleanupPermissions","Clean Up Admin Roles & Groups","Error","Failed to retrieve memberships: GET https://graph.microsoft.com/v1.0/users/ee6cc41c-60d8-401a-8fbc-aeda4a1a1a75/memberOf?$select=id,displayName,@odata.type&$top=100
+HTTP/2.0 400 Bad Request
+Vary: Accept-Encoding
+Strict-Transport-Security: max-age=31536000
+request-id: 3aff19ae-d9a9-4061-9312-46232bc8ed02
+client-request-id: 409d8a00-84b6-4cdb-aec7-c4514a01e82f
+x-ms-ags-diagnostic: {""ServerInfo"":{""DataCenter"":""South Africa North"",""Slice"":""E"",""Ring"":""2"",""ScaleUnit"":""001"",""RoleInstance"":""JN2PEPF00001477""}}
+Date: Tue, 12 May 2026 08:45:51 GMT
+Content-Type: application/json
+
+{""error"":{""code"":""BadRequest"",""message"":""Parsing OData Select and Expand failed: Term '@odata.type' is not valid in a $select or $expand expression."",""innerError"":{""date"":""2026-05-12T08:45:51"",""request-id"":""3aff19ae-d9a9-4061-9312-46232bc8ed02"",""client-request-id"":""409d8a00-84b6-4cdb-aec7-c4514a01e82f""}}}"
+"2026-05-12 10:45:50","Bob@robinm365lab.myo365.site","ee6cc41c-60d8-401a-8fbc-aeda4a1a1a75","TransferOneDrive","Transfer OneDrive Access to Manager","Skipped","No manager found for user — OneDrive access not transferred. Assign manually via SharePoint admin."
+"2026-05-12 10:45:50","Bob@robinm365lab.myo365.site","ee6cc41c-60d8-401a-8fbc-aeda4a1a1a75","RemoveTeamsAndDLs","Remove from Teams & Distribution Lists","Skipped","User had no Teams memberships or distribution list memberships"
+"2026-05-12 10:45:58","Bob@robinm365lab.myo365.site","ee6cc41c-60d8-401a-8fbc-aeda4a1a1a75","RemoveDelegatedAccess","Remove Delegated Mailbox Access","Success","No delegated mailbox permissions found for this user. Note: FullAccess scan covered shared mailboxes only — verify user mailboxes manually if required."
+"2026-05-12 10:46:03","Bob@robinm365lab.myo365.site","ee6cc41c-60d8-401a-8fbc-aeda4a1a1a75","RemoveSharePoint","Remove SharePoint Site Memberships","Success","No direct SharePoint site permissions found. Group-based access is handled by the Cleanup Permissions step."
+"2026-05-12 10:46:04","Bob@robinm365lab.myo365.site","ee6cc41c-60d8-401a-8fbc-aeda4a1a1a75","DisableMfa","Disable / Reset MFA Methods","Skipped","No removable MFA methods registered for this user"

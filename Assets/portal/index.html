@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>M365 User Offboarding</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" />
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <div id="app">
+
+    <header class="header">
+      <div class="header-brand">
+        <!-- Shield / offboarding icon -->
+        <svg class="header-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
+             fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          <line x1="15" y1="9" x2="9" y2="15"/>
+          <line x1="9" y1="9" x2="15" y2="15"/>
+        </svg>
+        <span class="header-title">M365 User Offboarding</span>
+      </div>
+
+      <div id="tenant-info" class="header-tenant">
+        <span class="badge badge-gray">Connecting…</span>
+      </div>
+
+      <nav class="header-nav">
+        <a href="#/users"    class="nav-link" data-view="users">Users</a>
+        <a href="#/offboard" class="nav-link" data-view="offboard">Offboard</a>
+        <a href="#/audit"    class="nav-link" data-view="audit">Audit Log</a>
+      </nav>
+
+      <button class="btn btn-ghost btn-sm" id="btn-logout"
+              title="Disconnect from Microsoft 365" style="flex-shrink:0;display:none">
+        ⏏ Logout
+      </button>
+      <button class="btn btn-ghost btn-sm" id="btn-close-server"
+              title="Stop the local portal server" style="margin-left:8px;flex-shrink:0">
+        ✕ Close
+      </button>
+    </header>
+
+    <main class="main">
+      <div id="view-connect" class="view"></div>
+      <div id="view-users"    class="view"></div>
+      <div id="view-offboard" class="view"></div>
+      <div id="view-audit"    class="view"></div>
+    </main>
+
+    <div id="toast-container"></div>
+    <div id="loading-overlay" class="hidden"><div class="spinner"></div></div>
+
+  </div>
+  <script src="/static/app.js"></script>
+</body>
+</html>
