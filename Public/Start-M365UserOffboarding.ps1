@@ -25,7 +25,7 @@ function Start-M365UserOffboarding {
     Write-Host ''
     Write-Host '  ╔═════════════════════════════════════════╗' -ForegroundColor Cyan
     Write-Host '  ║   M365 User Offboarding Portal          ║' -ForegroundColor Cyan
-    Write-Host "  ║   Module version $moduleVersion$((' ' * [Math]::Max(0, 22 - "$moduleVersion".Length)))║" -ForegroundColor Cyan
+    Write-Host "  ║   Module version $moduleVersion$((' ' * [Math]::Max(0, 22 - "$moduleVersion".Length))) ║" -ForegroundColor Cyan
     Write-Host '  ╚═════════════════════════════════════════╝' -ForegroundColor Cyan
     Write-Host ''
 
