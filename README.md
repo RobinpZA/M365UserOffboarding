@@ -113,9 +113,9 @@ Start-M365UserOffboarding -Port 9090
 
 On launch the module will:
 
-1. Authenticate to **Microsoft Graph** (interactive browser sign-in) and **Exchange Online**
-2. Display tenant and connection details in the console
-3. Open `http://127.0.0.1:<port>/` in your default browser automatically
+1. Open `http://127.0.0.1:<port>/` in your default browser automatically
+2. Prompt you to authenticate to **Microsoft Graph** and **Exchange Online**
+3. Display tenant and connection details in the console
 4. Block until you click **✕ Close** in the portal
 5. Prompt you to export the audit log
 
