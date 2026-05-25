@@ -11,7 +11,8 @@ function Step-RemoveSharePointAccess {
     param(
         [Parameter(Mandatory)] [string]$UserId,
         [Parameter(Mandatory)] [string]$UserUPN,
-        [hashtable]$Config = @{}
+        [hashtable]$Config = @{},
+        [switch]$WhatIf
     )
 
     $result = [PSCustomObject]@{
@@ -39,7 +40,36 @@ function Step-RemoveSharePointAccess {
         $result.Message = "Failed to enumerate SharePoint sites: $_"
         return $result
     }
-
+    # ── What-If: describe changes without applying them ───────────────────────
+    if ($WhatIf) {
+        $sitesFound = [System.Collections.Generic.List[string]]::new()
+        foreach ($site in $sites) {
+            try {
+                $permsResp = Invoke-MgGraphRequest -Method GET `
+                    -Uri ('/v1.0/sites/' + $site.id + '/permissions') -ErrorAction SilentlyContinue
+                if (-not $permsResp) { continue }
+                foreach ($perm in $permsResp.value) {
+                    $grantedToList = @()
+                    if ($perm.grantedToIdentitiesV2) {
+                        $grantedToList = @($perm.grantedToIdentitiesV2 | ForEach-Object { $_.user })
+                    }
+                    elseif ($perm.grantedToV2) {
+                        $grantedToList = @($perm.grantedToV2.user)
+                    }
+                    $isUser = $grantedToList | Where-Object { $_ -and ($_.id -eq $UserId -or $_.email -eq $UserUPN) }
+                    if ($isUser) { $sitesFound.Add($site.displayName ?? $site.webUrl) }
+                }
+            }
+            catch { Write-Verbose "WhatIf SharePoint: $($site.displayName) — $_" }
+        }
+        $result.Status  = 'WhatIf'
+        $result.Message = if ($sitesFound.Count -gt 0) {
+            "Would remove direct permissions from $($sitesFound.Count) site(s): $($sitesFound -join ', ')"
+        } else {
+            'No direct SharePoint site permissions found — no action would be taken'
+        }
+        return $result
+    }
     # ── Check and remove per-site permissions ─────────────────────────────────
     foreach ($site in $sites) {
         try {

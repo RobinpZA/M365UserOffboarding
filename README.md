@@ -11,6 +11,7 @@ A PowerShell module that launches an interactive local web portal for offboardin
 
 - **Browser-based portal** — served locally at `http://127.0.0.1:8080`, no external hosting required
 - **11-step offboarding workflow** — each step can be individually enabled, disabled, or configured before running
+- **What-If preview mode** — run a full dry-run from the portal to see exactly what each step *would* do without applying any changes
 - **Bulk offboarding** — select multiple users and run all steps in a single operation
 - **Conditional steps** — Intune device actions are automatically skipped when the tenant has no Intune licence
 - **Audit log** — every step result is recorded and exportable as both CSV and a styled HTML report
@@ -129,8 +130,17 @@ On launch the module will:
 | View | Description |
 |------|-------------|
 | **Users** | Search and paginate all users in the tenant. Select one or more to offboard. |
-| **Offboard** | Review selected users, toggle individual steps on/off, supply configuration (delegate UPN, OOO message, device action), and run the workflow. |
+| **Offboard** | Review selected users, toggle individual steps on/off, supply configuration (delegate UPN, OOO message, device action), run **Preview (What-If)** for a dry-run, or run the live workflow. |
 | **Audit Log** | Live view of all step results from the current session, with per-user and per-step status badges. |
+
+### What-If preview
+
+Use **Preview (What-If)** on the **Offboard** view to execute the full workflow in simulation mode.
+
+- All enabled steps are evaluated in normal order
+- No write operations are performed against Microsoft 365, Entra, Exchange, Intune, OneDrive, or SharePoint
+- Step results are returned with status **WhatIf** so you can review expected impact before running live
+- A preview banner is shown in the results panel to make it clear no changes were made
 
 ---
 
@@ -142,6 +152,8 @@ After the portal is closed, results are saved to `Output\AuditLogs\`:
 |------|--------|
 | `OffboardingAudit_<timestamp>.csv` | Machine-readable; suitable for import into Excel or SIEM |
 | `OffboardingAudit_<timestamp>.html` | Styled report with success/error/skipped counts and colour-coded badges |
+
+Both formats include **WhatIf** status rows when preview mode is used.
 
 ---
 

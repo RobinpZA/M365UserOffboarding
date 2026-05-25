@@ -11,7 +11,8 @@ function Step-SetOutOfOffice {
     param(
         [Parameter(Mandatory)] [string]$UserId,
         [Parameter(Mandatory)] [string]$UserUPN,
-        [hashtable]$Config = @{}
+        [hashtable]$Config = @{},
+        [switch]$WhatIf
     )
 
     $result = [PSCustomObject]@{
@@ -32,6 +33,15 @@ function Step-SetOutOfOffice {
     }
     if (-not $externalMsg) {
         $externalMsg = $internalMsg
+    }
+
+    # ── What-If: describe changes without applying them ───────────────────────
+    if ($WhatIf) {
+        $preview = $internalMsg.Substring(0, [Math]::Min(80, $internalMsg.Length))
+        if ($internalMsg.Length -gt 80) { $preview += '…' }
+        $result.Status  = 'WhatIf'
+        $result.Message = "Would enable out-of-office auto-reply; Internal: `"$preview`""
+        return $result
     }
 
     try {

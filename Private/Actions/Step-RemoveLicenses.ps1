@@ -7,7 +7,8 @@ function Step-RemoveLicenses {
     param(
         [Parameter(Mandatory)] [string]$UserId,
         [Parameter(Mandatory)] [string]$UserUPN,
-        [hashtable]$Config = @{}
+        [hashtable]$Config = @{},
+        [switch]$WhatIf
     )
 
     $result = [PSCustomObject]@{
@@ -38,7 +39,13 @@ function Step-RemoveLicenses {
         $result.Message = 'User has no assigned licences'
         return $result
     }
-
+    # ── What-If: describe changes without applying them ───────────────────────
+    if ($WhatIf) {
+        $skuNames = $licResp.value | ForEach-Object { $_.skuPartNumber ?? $_.skuId }
+        $result.Status  = 'WhatIf'
+        $result.Message = "Would remove $($skuIds.Count) licence(s): $($skuNames -join ', ')"
+        return $result
+    }
     # ── Remove all licences in one call ───────────────────────────────────────
     try {
         $body = @{

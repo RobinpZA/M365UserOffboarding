@@ -10,7 +10,8 @@ function Step-TransferOneDrive {
     param(
         [Parameter(Mandatory)] [string]$UserId,
         [Parameter(Mandatory)] [string]$UserUPN,
-        [hashtable]$Config = @{}
+        [hashtable]$Config = @{},
+        [switch]$WhatIf
     )
 
     $result = [PSCustomObject]@{
@@ -41,7 +42,25 @@ function Step-TransferOneDrive {
         $result.Message = 'Manager has no UPN — cannot grant OneDrive access automatically'
         return $result
     }
-
+    # ── What-If: describe changes without applying them ───────────────────────
+    if ($WhatIf) {
+        try {
+            Invoke-MgGraphRequest -Method GET -Uri ('/v1.0/users/' + $UserId + '/drive?$select=id,webUrl') -ErrorAction Stop | Out-Null
+            $result.Status  = 'WhatIf'
+            $result.Message = "Would grant write access to OneDrive to manager: $managerUpn"
+        }
+        catch {
+            $errFull = $_.Exception.Message + ' ' + ($_.ErrorDetails?.Message ?? '')
+            $result.Status = 'WhatIf'
+            if ($errFull -match 'ResourceNotFound|mysite not found|404') {
+                $result.Message = "User's OneDrive has not been provisioned — no data to transfer"
+            }
+            else {
+                $result.Message = "Would grant write access to OneDrive to manager: $managerUpn (drive info unavailable)"
+            }
+        }
+        return $result
+    }
     # ── Get user's OneDrive ───────────────────────────────────────────────────
     $driveId = ''
     try {

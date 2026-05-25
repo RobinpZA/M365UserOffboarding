@@ -7,7 +7,8 @@ function Step-RemoveTeamsAndDLs {
     param(
         [Parameter(Mandatory)] [string]$UserId,
         [Parameter(Mandatory)] [string]$UserUPN,
-        [hashtable]$Config = @{}
+        [hashtable]$Config = @{},
+        [switch]$WhatIf
     )
 
     $result = [PSCustomObject]@{
@@ -22,6 +23,40 @@ function Step-RemoveTeamsAndDLs {
 
     $removed = [System.Collections.Generic.List[string]]::new()
     $errors  = [System.Collections.Generic.List[string]]::new()
+
+    # ── What-If: describe changes without applying them ───────────────────────
+    if ($WhatIf) {
+        $teamsFound = [System.Collections.Generic.List[string]]::new()
+        $dlsFound   = [System.Collections.Generic.List[string]]::new()
+
+        try {
+            $memUri  = '/v1.0/users/' + $UserId + '/memberOf?$select=id,displayName,resourceProvisioningOptions&$top=100'
+            $memResp = Invoke-MgGraphRequest -Method GET -Uri $memUri -ErrorAction Stop
+            @($memResp.value | Where-Object {
+                $_.'@odata.type' -eq '#microsoft.graph.group' -and
+                $_.resourceProvisioningOptions -contains 'Team'
+            }) | ForEach-Object { $teamsFound.Add($_.displayName) }
+        }
+        catch { $teamsFound.Add('(error reading Teams memberships)') }
+
+        try {
+            $mbx = Get-Mailbox -Identity $UserUPN -ErrorAction SilentlyContinue
+            if ($mbx) {
+                $dn  = $mbx.DistinguishedName
+                @(Get-DistributionGroup -Filter "Members -eq '$dn'" -ErrorAction SilentlyContinue) |
+                    ForEach-Object { $dlsFound.Add($_.DisplayName) }
+            }
+        }
+        catch { }
+
+        $parts = [System.Collections.Generic.List[string]]::new()
+        if ($teamsFound.Count -gt 0) { $parts.Add("Would remove from $($teamsFound.Count) Team(s): $($teamsFound -join ', ')") }
+        if ($dlsFound.Count -gt 0)   { $parts.Add("Would remove from $($dlsFound.Count) distribution list(s): $($dlsFound -join ', ')") }
+        if ($parts.Count -eq 0)      { $parts.Add('No Teams memberships or distribution list memberships found') }
+        $result.Status  = 'WhatIf'
+        $result.Message = $parts -join '; '
+        return $result
+    }
 
     # ── Microsoft Teams ───────────────────────────────────────────────────────
     # Query memberOf and filter for Teams-connected M365 groups.

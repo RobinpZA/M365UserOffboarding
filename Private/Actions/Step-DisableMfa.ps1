@@ -10,7 +10,8 @@ function Step-DisableMfa {
     param(
         [Parameter(Mandatory)] [string]$UserId,
         [Parameter(Mandatory)] [string]$UserUPN,
-        [hashtable]$Config = @{}
+        [hashtable]$Config = @{},
+        [switch]$WhatIf
     )
 
     $result = [PSCustomObject]@{
@@ -46,7 +47,22 @@ function Step-DisableMfa {
         $result.Message = "Failed to retrieve authentication methods: $_"
         return $result
     }
-
+    # ── What-If: describe changes without applying them ───────────────────────
+    if ($WhatIf) {
+        $removable = @($methods | Where-Object {
+            $_.'@odata.type' -ne '#microsoft.graph.passwordAuthenticationMethod' -and
+            $methodSubPaths[$_.'@odata.type']
+        })
+        if ($removable.Count -eq 0) {
+            $result.Status  = 'WhatIf'
+            $result.Message = 'No removable MFA methods registered — no action would be taken'
+            return $result
+        }
+        $names = $removable | ForEach-Object { $_.'@odata.type'.Split('.')[-1] -replace 'AuthenticationMethod', '' }
+        $result.Status  = 'WhatIf'
+        $result.Message = "Would remove $($removable.Count) MFA method(s): $($names -join ', ')"
+        return $result
+    }
     $removed = [System.Collections.Generic.List[string]]::new()
     $errors  = [System.Collections.Generic.List[string]]::new()
 

@@ -17,6 +17,7 @@ function Invoke-OffboardUsers {
 
     $userIds     = $RequestBody['userIds']
     $stepsConfig = $RequestBody['steps']
+    $isWhatIf    = $RequestBody['whatIf'] -eq $true
 
     if (-not $userIds -or $userIds.Count -eq 0) {
         return @{ success = $false; error = 'No users specified' }
@@ -64,6 +65,7 @@ function Invoke-OffboardUsers {
         }
 
         Write-Host "  Offboarding: $($userResult.displayName) ($($userResult.userUPN))" -ForegroundColor Cyan
+        if ($isWhatIf) { Write-Host '  [What-If mode — no changes will be applied]' -ForegroundColor DarkYellow }
 
         foreach ($stepKey in $stepMap.Keys) {
 
@@ -99,15 +101,17 @@ function Invoke-OffboardUsers {
                 $stepResult = & $fnName `
                     -UserId  $userId `
                     -UserUPN $userResult.userUPN `
-                    -Config  $config
+                    -Config  $config `
+                    -WhatIf:$isWhatIf
 
                 $userResult.steps.Add($stepResult)
                 Write-AuditEntry -Entry $stepResult
 
                 $color = switch ($stepResult.Status) {
-                    'Success' { 'Green'  }
-                    'Skipped' { 'Yellow' }
-                    default   { 'Red'    }
+                    'Success' { 'Green'   }
+                    'Skipped' { 'Yellow'  }
+                    'WhatIf'  { 'Cyan'    }
+                    default   { 'Red'     }
                 }
                 Write-Host "    [$stepKey] $($stepResult.Status): $($stepResult.Message)" -ForegroundColor $color
             }
@@ -155,5 +159,5 @@ function Invoke-OffboardUsers {
         }
     })
 
-    return @{ success = $true; results = $serializable }
+    return @{ success = $true; whatIf = $isWhatIf; results = $serializable }
 }

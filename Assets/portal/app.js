@@ -12,6 +12,7 @@
     selected:     new Set(),      // Set of user IDs
     userDetails:  {},             // id → detail object cache
     results:      null,           // last offboarding results array
+    whatIfMode:   false,          // true when last run was a what-if preview
     steps: {
       CleanupPermissions:    { enabled: true,  label: 'Clean Up Admin Roles & Groups',          config: null },
       BlockSignIn:           { enabled: true,  label: 'Block Sign-In & Revoke Sessions',        config: null },
@@ -88,7 +89,7 @@
   }
 
   function statusBadgeClass(s) {
-    return { Success: 'badge-green', Error: 'badge-red', Skipped: 'badge-gray' }[s] ?? 'badge-blue';
+    return { Success: 'badge-green', Error: 'badge-red', Skipped: 'badge-gray', WhatIf: 'badge-blue' }[s] ?? 'badge-blue';
   }
 
   /* ── Router ──────────────────────────────────────────────────────────── */
@@ -449,7 +450,8 @@
         <div class="view-actions">
           ${hasResults
             ? `<button class="btn btn-outline" id="btn-reset-offboard">← Start New</button>`
-            : `<button class="btn btn-danger"   id="btn-execute">Execute Offboarding</button>`
+            : `<button class="btn btn-outline" id="btn-preview">🔍 Preview (What-If)</button>
+               <button class="btn btn-danger"   id="btn-execute">Execute Offboarding</button>`
           }
         </div>
       </div>
@@ -466,7 +468,8 @@
 
     if (!hasResults) {
       wireStepCards();
-      document.getElementById('btn-execute')?.addEventListener('click', executeOffboarding);
+      document.getElementById('btn-execute')?.addEventListener('click', () => executeOffboarding(false));
+      document.getElementById('btn-preview')?.addEventListener('click', () => executeOffboarding(true));
 
       // Remove-user buttons inside selected list
       view.querySelectorAll('.remove-selected-user').forEach(btn => {
@@ -478,7 +481,8 @@
       });
     } else {
       document.getElementById('btn-reset-offboard')?.addEventListener('click', () => {
-        state.results = null;
+        state.results     = null;
+        state.whatIfMode  = false;
         state.selected.clear();
         location.hash = '#/users';
       });
@@ -597,9 +601,17 @@
   }
 
   function renderResultsHTML() {
-    const results = state.results;
+    const results    = state.results;
+    const isWhatIf   = state.whatIfMode;
+    const bannerHTML = isWhatIf
+      ? `<div class="whatif-banner">
+           <strong>🔍 What-If Preview — no changes were made.</strong>
+           Review what would happen, then click ‘← Start New’ and run ‘Execute Offboarding’ to apply.
+         </div>`
+      : '';
     return `
-      <p class="col-heading">Results</p>
+      <p class="col-heading">Results${isWhatIf ? ' <span class="badge badge-blue">Preview</span>' : ''}</p>
+      ${bannerHTML}
       <div class="results-wrap">
         ${results.map(ur => `
           <div class="user-result-block">
@@ -626,7 +638,7 @@
     `;
   }
 
-  async function executeOffboarding() {
+  async function executeOffboarding(whatIf = false) {
     const userIds = [...state.selected];
     if (userIds.length === 0) return;
 
@@ -637,11 +649,15 @@
     });
 
     setLoading(true);
-    toast('Offboarding in progress… this may take a few minutes.', 'info');
+    toast(
+      whatIf ? 'Running What-If preview… no changes will be made.' : 'Offboarding in progress… this may take a few minutes.',
+      'info'
+    );
 
     try {
-      const response = await api.post('/api/offboard', { userIds, steps: stepsPayload });
-      state.results = response.results ?? [];
+      const response = await api.post('/api/offboard', { userIds, steps: stepsPayload, whatIf });
+      state.results    = response.results ?? [];
+      state.whatIfMode = !!response.whatIf;
 
       const success = state.results.reduce((n, ur) =>
         n + (ur.steps || []).filter(s => (s.status || s.Status) === 'Success').length, 0);
@@ -650,8 +666,10 @@
 
       renderOffboardView();
       toast(
-        `Offboarding complete — ${success} step(s) succeeded, ${errors} failed.`,
-        errors > 0 ? 'warn' : 'success'
+        whatIf
+          ? `Preview complete — ${success} step(s) would succeed, ${errors} not applicable.`
+          : `Offboarding complete — ${success} step(s) succeeded, ${errors} failed.`,
+        errors > 0 && !whatIf ? 'warn' : 'success'
       );
     } catch (e) {
       toast('Offboarding failed: ' + e.message, 'error');

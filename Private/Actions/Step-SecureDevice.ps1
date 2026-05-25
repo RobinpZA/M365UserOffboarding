@@ -13,7 +13,8 @@ function Step-SecureDevice {
     param(
         [Parameter(Mandatory)] [string]$UserId,
         [Parameter(Mandatory)] [string]$UserUPN,
-        [hashtable]$Config = @{}
+        [hashtable]$Config = @{},
+        [switch]$WhatIf
     )
 
     $result = [PSCustomObject]@{
@@ -53,6 +54,15 @@ function Step-SecureDevice {
     if ($devices.Count -eq 0) {
         $result.Status  = 'Skipped'
         $result.Message = 'No Intune-managed devices found for this user'
+        return $result
+    }
+
+    # ── What-If: describe changes without applying them ───────────────────────
+    if ($WhatIf) {
+        $actionLabel   = if ($action -eq 'Reset') { 'factory wipe' } else { 'retire (remove company data)' }
+        $deviceNames   = $devices | ForEach-Object { $_.deviceName ?? $_.id }
+        $result.Status  = 'WhatIf'
+        $result.Message = "Would $actionLabel $($devices.Count) device(s): $($deviceNames -join ', ')"
         return $result
     }
 

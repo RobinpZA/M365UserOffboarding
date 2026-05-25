@@ -7,7 +7,8 @@ function Step-CleanupPermissions {
     param(
         [Parameter(Mandatory)] [string]$UserId,
         [Parameter(Mandatory)] [string]$UserUPN,
-        [hashtable]$Config = @{}
+        [hashtable]$Config = @{},
+        [switch]$WhatIf
     )
 
     $result = [PSCustomObject]@{
@@ -35,6 +36,22 @@ function Step-CleanupPermissions {
     catch {
         $result.Status  = 'Error'
         $result.Message = "Failed to retrieve memberships: $_"
+        return $result
+    }
+
+    # ── What-If: describe changes without applying them ───────────────────────
+    if ($WhatIf) {
+        $rolesFound  = @($memberships | Where-Object { $_.'@odata.type' -eq '#microsoft.graph.directoryRole' })
+        $groupsFound = @($memberships | Where-Object {
+            $_.'@odata.type' -eq '#microsoft.graph.group' -and
+            ($_.resourceProvisioningOptions -notcontains 'Team')
+        })
+        $parts = [System.Collections.Generic.List[string]]::new()
+        if ($rolesFound.Count -gt 0)  { $parts.Add("$($rolesFound.Count) admin role(s) to remove: $($rolesFound.displayName -join ', ')") }
+        if ($groupsFound.Count -gt 0) { $parts.Add("$($groupsFound.Count) group(s) to remove") }
+        if ($parts.Count -eq 0)       { $parts.Add('No admin roles or non-Teams group memberships found') }
+        $result.Status  = 'WhatIf'
+        $result.Message = $parts -join '; '
         return $result
     }
 

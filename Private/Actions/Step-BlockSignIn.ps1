@@ -7,7 +7,8 @@ function Step-BlockSignIn {
     param(
         [Parameter(Mandatory)] [string]$UserId,
         [Parameter(Mandatory)] [string]$UserUPN,
-        [hashtable]$Config = @{}
+        [hashtable]$Config = @{},
+        [switch]$WhatIf
     )
 
     $result = [PSCustomObject]@{
@@ -22,6 +23,21 @@ function Step-BlockSignIn {
 
     $messages = [System.Collections.Generic.List[string]]::new()
     $errors   = [System.Collections.Generic.List[string]]::new()
+
+    # ── What-If: describe changes without applying them ───────────────────────
+    if ($WhatIf) {
+        $currentStatus = 'status unknown'
+        try {
+            $userInfo = Invoke-MgGraphRequest -Method GET `
+                -Uri ('/v1.0/users/' + $UserId + '?$select=accountEnabled') `
+                -ErrorAction Stop
+            $currentStatus = if ($userInfo.accountEnabled) { 'currently enabled' } else { 'already blocked' }
+        }
+        catch { }
+        $result.Status  = 'WhatIf'
+        $result.Message = "Would block sign-in ($currentStatus) and revoke all active sessions"
+        return $result
+    }
 
     # ── Block sign-in ─────────────────────────────────────────────────────────
     try {

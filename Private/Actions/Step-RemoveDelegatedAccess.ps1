@@ -11,7 +11,8 @@ function Step-RemoveDelegatedAccess {
     param(
         [Parameter(Mandatory)] [string]$UserId,
         [Parameter(Mandatory)] [string]$UserUPN,
-        [hashtable]$Config = @{}
+        [hashtable]$Config = @{},
+        [switch]$WhatIf
     )
 
     $result = [PSCustomObject]@{
@@ -26,7 +27,34 @@ function Step-RemoveDelegatedAccess {
 
     $removed = [System.Collections.Generic.List[string]]::new()
     $errors  = [System.Collections.Generic.List[string]]::new()
-
+    # ── What-If: describe changes without applying them ───────────────────────
+    if ($WhatIf) {
+        $found = [System.Collections.Generic.List[string]]::new()
+        try {
+            @(Get-RecipientPermission -Trustee $UserUPN -ErrorAction SilentlyContinue) |
+                ForEach-Object { $found.Add("SendAs on $($_.Identity)") }
+        }
+        catch { }
+        try {
+            @(Get-Mailbox -RecipientTypeDetails SharedMailbox -ResultSize 500 -ErrorAction SilentlyContinue) |
+                ForEach-Object {
+                    try {
+                        @(Get-MailboxPermission -Identity $_.PrimarySmtpAddress -User $UserUPN -ErrorAction SilentlyContinue) |
+                            Where-Object { $_.AccessRights -contains 'FullAccess' } |
+                            ForEach-Object { $found.Add("FullAccess on $($_.Identity)") }
+                    }
+                    catch { }
+                }
+        }
+        catch { }
+        $result.Status  = 'WhatIf'
+        $result.Message = if ($found.Count -gt 0) {
+            "Would remove $($found.Count) delegated permission(s): $($found -join ', ')"
+        } else {
+            'No delegated mailbox permissions found — no action would be taken'
+        }
+        return $result
+    }
     # ── SendAs permissions (tenant-wide query available) ──────────────────────
     try {
         $sendAsPerms = @(Get-RecipientPermission -Trustee $UserUPN -ErrorAction SilentlyContinue)
