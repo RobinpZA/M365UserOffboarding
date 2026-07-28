@@ -96,11 +96,6 @@ function Connect-OffboardingServices {
     # ── Exchange Online ───────────────────────────────────────────────────────
     Write-Host '  Connecting to Exchange Online...' -ForegroundColor Cyan
     try {
-        # Install module if needed
-        if (-not (Get-Module -ListAvailable -Name ExchangeOnlineManagement)) {
-            Write-Host '  Installing ExchangeOnlineManagement...' -ForegroundColor Yellow
-            Install-Module ExchangeOnlineManagement -Scope CurrentUser -Force -ErrorAction Stop
-        }
         Import-Module ExchangeOnlineManagement -ErrorAction Stop
 
         Connect-ExchangeOnline -ShowBanner:$false -ErrorAction Stop

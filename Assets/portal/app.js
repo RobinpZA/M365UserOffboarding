@@ -39,9 +39,15 @@
       return r.json();
     },
     async post(path, body) {
+      const headers = { 'Content-Type': 'application/json' };
+      // Include CSRF token on every state-changing POST so the server can reject
+      // cross-site requests that do not originate from this portal page.
+      if (state.context?.csrfToken) {
+        headers['X-CSRF-Token'] = state.context.csrfToken;
+      }
       const r = await fetch(path, {
         method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body:    JSON.stringify(body),
       });
       if (!r.ok) {
@@ -89,7 +95,7 @@
   }
 
   function statusBadgeClass(s) {
-    return { Success: 'badge-green', Error: 'badge-red', Skipped: 'badge-gray', WhatIf: 'badge-blue' }[s] ?? 'badge-blue';
+    return { Success: 'badge-green', Error: 'badge-red', Skipped: 'badge-gray', WhatIf: 'badge-blue', Warning: 'badge-orange' }[s] ?? 'badge-blue';
   }
 
   /* ── Router ──────────────────────────────────────────────────────────── */
@@ -655,21 +661,26 @@
     );
 
     try {
+      // Offboarding runs synchronously on the server — the browser waits for the
+      // response. The loading overlay keeps the UI responsive-looking during the run.
       const response = await api.post('/api/offboard', { userIds, steps: stepsPayload, whatIf });
+
       state.results    = response.results ?? [];
       state.whatIfMode = !!response.whatIf;
 
-      const success = state.results.reduce((n, ur) =>
+      const success  = state.results.reduce((n, ur) =>
         n + (ur.steps || []).filter(s => (s.status || s.Status) === 'Success').length, 0);
-      const errors = state.results.reduce((n, ur) =>
+      const errors   = state.results.reduce((n, ur) =>
         n + (ur.steps || []).filter(s => (s.status || s.Status) === 'Error').length, 0);
+      const warnings = state.results.reduce((n, ur) =>
+        n + (ur.steps || []).filter(s => (s.status || s.Status) === 'Warning').length, 0);
 
       renderOffboardView();
       toast(
         whatIf
           ? `Preview complete — ${success} step(s) would succeed, ${errors} not applicable.`
-          : `Offboarding complete — ${success} step(s) succeeded, ${errors} failed.`,
-        errors > 0 && !whatIf ? 'warn' : 'success'
+          : `Offboarding complete — ${success} succeeded, ${errors} failed, ${warnings} partial.`,
+        (errors > 0 || warnings > 0) && !whatIf ? 'warn' : 'success'
       );
     } catch (e) {
       toast('Offboarding failed: ' + e.message, 'error');
@@ -803,7 +814,9 @@
       } catch (e) {
         toast(`Disconnect error: ${e.message}`, 'warn');
       }
-      state.context = null;
+      // Keep the CSRF token — it is issued per server run, not per session, and
+      // the reconnect POST to /api/connect is rejected with 403 without it.
+      state.context = { csrfToken: state.context?.csrfToken, connected: false };
       state.users   = [];
       state.selected.clear();
       state.results = null;

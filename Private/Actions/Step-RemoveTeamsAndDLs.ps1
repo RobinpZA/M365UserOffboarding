@@ -30,12 +30,15 @@ function Step-RemoveTeamsAndDLs {
         $dlsFound   = [System.Collections.Generic.List[string]]::new()
 
         try {
-            $memUri  = '/v1.0/users/' + $UserId + '/memberOf?$select=id,displayName,resourceProvisioningOptions&$top=100'
-            $memResp = Invoke-MgGraphRequest -Method GET -Uri $memUri -ErrorAction Stop
-            @($memResp.value | Where-Object {
-                $_.'@odata.type' -eq '#microsoft.graph.group' -and
-                $_.resourceProvisioningOptions -contains 'Team'
-            }) | ForEach-Object { $teamsFound.Add($_.displayName) }
+            $memUri = '/v1.0/users/' + $UserId + '/memberOf?$select=id,displayName,resourceProvisioningOptions&$top=100'
+            do {
+                $memResp = Invoke-MgGraphRequest -Method GET -Uri $memUri -ErrorAction Stop
+                @($memResp.value | Where-Object {
+                    $_.'@odata.type' -eq '#microsoft.graph.group' -and
+                    $_.resourceProvisioningOptions -contains 'Team'
+                }) | ForEach-Object { $teamsFound.Add($_.displayName) }
+                $memUri = $memResp.'@odata.nextLink'
+            } while ($memUri)
         }
         catch { $teamsFound.Add('(error reading Teams memberships)') }
 
@@ -68,8 +71,13 @@ function Step-RemoveTeamsAndDLs {
     # membership endpoint.
     try {
         $memUri  = '/v1.0/users/' + $UserId + '/memberOf?$select=id,displayName,resourceProvisioningOptions&$top=100'
-        $memResp = Invoke-MgGraphRequest -Method GET -Uri $memUri -ErrorAction Stop
-        $teams   = @($memResp.value | Where-Object {
+        $allMembers = [System.Collections.Generic.List[object]]::new()
+        do {
+            $memResp = Invoke-MgGraphRequest -Method GET -Uri $memUri -ErrorAction Stop
+            $allMembers.AddRange([object[]]@($memResp.value))
+            $memUri = $memResp.'@odata.nextLink'
+        } while ($memUri)
+        $teams   = @($allMembers | Where-Object {
             $_.'@odata.type' -eq '#microsoft.graph.group' -and
             $_.resourceProvisioningOptions -contains 'Team'
         })
@@ -127,7 +135,7 @@ function Step-RemoveTeamsAndDLs {
         $result.Message = "Removed from $($removed.Count) group(s): $($removed -join ', ')"
     }
     else {
-        $result.Status  = 'Error'
+        $result.Status  = if ($removed.Count -gt 0) { 'Warning' } else { 'Error' }
         $parts = @()
         if ($removed.Count -gt 0) { $parts += "Removed: $($removed -join ', ')" }
         $parts += 'ERRORS: ' + ($errors -join '; ')

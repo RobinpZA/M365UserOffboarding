@@ -11,6 +11,7 @@ $script:TenantName       = ''
 $script:TenantId         = ''
 $script:ConnectedAs      = ''
 $script:HasIntuneLicense = $false
+$script:CsrfToken        = ''
 # Cursor cache for Graph user pagination (keyed by "$search|$pageNumber" → nextLink URL)
 $script:UserPageCursors  = @{}
 

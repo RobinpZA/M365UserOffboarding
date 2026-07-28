@@ -40,6 +40,7 @@ function Step-RemoveLicenses {
         return $result
     }
     # ── What-If: describe changes without applying them ───────────────────────
+    # $licResp is always set by this point — the catch above returns on failure.
     if ($WhatIf) {
         $skuNames = $licResp.value | ForEach-Object { $_.skuPartNumber ?? $_.skuId }
         $result.Status  = 'WhatIf'

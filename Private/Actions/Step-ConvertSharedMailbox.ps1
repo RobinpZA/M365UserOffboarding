@@ -98,7 +98,7 @@ function Step-ConvertSharedMailbox {
         $result.Message = $messages -join '; '
     }
     else {
-        $result.Status  = 'Error'
+        $result.Status  = if ($messages.Count -gt 0) { 'Warning' } else { 'Error' }
         $combined       = if ($messages.Count -gt 0) { ($messages -join '; ') + ' | ERRORS: ' + ($errors -join '; ') } else { $errors -join '; ' }
         $result.Message = $combined
     }

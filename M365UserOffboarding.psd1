@@ -21,6 +21,8 @@
     PrivateData = @{
         PSData = @{
             Tags         = @('M365', 'Microsoft365', 'Offboarding', 'EntraID', 'Exchange', 'Intune', 'Graph', 'Portal')
+            ProjectUri   = 'https://github.com/RobinpZA/M365UserOffboarding'
+            LicenseUri   = 'https://github.com/RobinpZA/M365UserOffboarding/blob/main/LICENSE'
             ReleaseNotes = 'Initial release — 11-step interactive offboarding portal with full audit log.'
         }
     }

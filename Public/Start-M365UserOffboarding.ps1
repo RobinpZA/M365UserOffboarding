@@ -38,22 +38,18 @@ function Start-M365UserOffboarding {
     $script:TenantId         = ''
     $script:ConnectedAs      = ''
     $script:HasIntuneLicense = $false
+    $script:CsrfToken        = [System.Convert]::ToBase64String(
+                                   [System.Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
     Write-Host ''
 
     # ── Launch portal ─────────────────────────────────────────────────────
     Write-Host '[2/2] Starting portal server…' -ForegroundColor Yellow
 
-    # Auto-open default browser shortly after server bind succeeds.
-    $browserJob = Start-Job -ScriptBlock {
-        Start-Sleep -Seconds 1
-        Start-Process "http://127.0.0.1:$using:Port/"
-    }
-
     # Start-OffboardingServer is blocking — returns only when the user clicks Close.
+    # Browser launch happens inside Start-OffboardingServer once the actual bound port
+    # is known, preventing the browser from opening on the wrong port when fallback
+    # binding is used.
     Start-OffboardingServer -PreferredPort $Port
-
-    # Clean up the browser-launch job now that the server has stopped.
-    $browserJob | Remove-Job -Force -ErrorAction SilentlyContinue
 
     Write-Host ''
     Write-Host 'Portal closed.' -ForegroundColor Cyan
@@ -63,9 +59,7 @@ function Start-M365UserOffboarding {
         Write-Host "$($script:AuditLog.Count) audit entries recorded." -ForegroundColor Yellow
         $choice = Read-Host 'Export audit log to Output\AuditLogs\ ? [Y/n]'
         if ($choice -ne 'n' -and $choice -ne 'N') {
-            $files = Export-AuditLog
-            Write-Host "Audit log saved:" -ForegroundColor Green
-            $files | ForEach-Object { Write-Host "  $_" -ForegroundColor Green }
+            $null = Export-AuditLog   # Export-AuditLog prints the saved paths itself
         }
     }
 

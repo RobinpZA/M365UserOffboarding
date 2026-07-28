@@ -111,6 +111,7 @@ function Invoke-OffboardUsers {
                     'Success' { 'Green'   }
                     'Skipped' { 'Yellow'  }
                     'WhatIf'  { 'Cyan'    }
+                    'Warning' { 'Yellow'  }
                     default   { 'Red'     }
                 }
                 Write-Host "    [$stepKey] $($stepResult.Status): $($stepResult.Message)" -ForegroundColor $color

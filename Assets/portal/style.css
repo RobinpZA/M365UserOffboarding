@@ -457,6 +457,7 @@ a:hover { text-decoration: underline; }
 .result-error   { background: var(--danger-dim); }
 .result-skipped { opacity: .55; }
 .result-whatif  { background: rgba(96,165,250,.06); }
+.result-warning { background: rgba(249,115,22,.08); }
 
 /* ── What-If banner ─────────────────────────────────────────────────────── */
 .whatif-banner {

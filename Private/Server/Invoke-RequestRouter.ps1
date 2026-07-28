@@ -72,8 +72,9 @@ function Invoke-RequestRouter {
         # ── Read body (POST) ──────────────────────────────────────────────────
         $body = $null
         if ($method -eq 'POST' -and $headers['content-length']) {
-            $contentLength = [int]$headers['content-length']
-            if ($contentLength -gt 0 -and $contentLength -le 1048576) {  # max 1 MB body
+            $contentLength = 0
+            if ([int]::TryParse($headers['content-length'], [ref]$contentLength) -and
+                $contentLength -gt 0 -and $contentLength -le 1048576) {  # max 1 MB body
                 $bodyBytes = New-Object byte[] $contentLength
                 $totalRead = 0
                 while ($totalRead -lt $contentLength) {
@@ -126,8 +127,18 @@ function Invoke-Route {
     $body       = $Context.Body
     $query      = $Context.QueryString
     $moduleRoot = $Context.ModuleRoot
+    $headers    = $Context.Headers
 
     try {
+        # ── CSRF guard — validate token on all state-changing POST requests ───────
+        if ($method -eq 'POST') {
+            $clientToken = $headers['x-csrf-token']
+            if ([string]::IsNullOrEmpty($script:CsrfToken) -or $clientToken -ne $script:CsrfToken) {
+                Write-JsonResponse -Stream $stream -Data @{ error = 'CSRF token mismatch. Reload the portal.' } -StatusCode 403
+                return
+            }
+        }
+
         switch -Regex ($path) {
 
             '^/$' {
@@ -161,6 +172,7 @@ function Invoke-Route {
                     tenantId         = [string]$script:TenantId
                     connectedAs      = [string]$script:ConnectedAs
                     hasIntuneLicense = $script:HasIntuneLicense
+                    csrfToken        = [string]$script:CsrfToken
                 }
                 Write-JsonResponse -Stream $stream -Data $ctx
                 return
@@ -176,6 +188,7 @@ function Invoke-Route {
                         connectedAs      = [string]$script:ConnectedAs
                         hasIntuneLicense = $script:HasIntuneLicense
                         exchange         = $true
+                        csrfToken        = [string]$script:CsrfToken
                     }
                     return
                 }
@@ -190,6 +203,7 @@ function Invoke-Route {
                         connectedAs      = [string]$auth.ConnectedAs
                         hasIntuneLicense = $auth.HasIntuneLicense
                         exchange         = $auth.Exchange
+                        csrfToken        = [string]$script:CsrfToken
                     }
                 }
                 catch {
@@ -251,7 +265,9 @@ function Invoke-Route {
                 if ($method -ne 'POST') {
                     Write-ErrorResponse -Stream $stream -Message 'Method not allowed' -StatusCode 405; return
                 }
-                $htmlPath = Export-AuditLog -ModuleRoot $moduleRoot
+                $exportPaths = Export-AuditLog -ModuleRoot $moduleRoot
+                # Export-AuditLog returns [htmlPath, csvPath]; send the HTML path to the browser.
+                $htmlPath = if ($exportPaths -is [array]) { $exportPaths[0] } else { $exportPaths }
                 Write-JsonResponse -Stream $stream -Data @{ filename = $htmlPath }
                 return
             }

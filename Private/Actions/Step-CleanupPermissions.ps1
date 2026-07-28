@@ -27,11 +27,14 @@ function Step-CleanupPermissions {
     $manualActions  = [System.Collections.Generic.List[string]]::new()
 
     # ── Get all memberships ───────────────────────────────────────────────────
-    $memberships = @()
+    $memberships = [System.Collections.Generic.List[object]]::new()
     try {
-        $memUri  = '/v1.0/users/' + $UserId + '/memberOf?$select=id,displayName,resourceProvisioningOptions&$top=100'
-        $memResp = Invoke-MgGraphRequest -Method GET -Uri $memUri -ErrorAction Stop
-        $memberships = @($memResp.value)
+        $memUri = '/v1.0/users/' + $UserId + '/memberOf?$select=id,displayName,resourceProvisioningOptions&$top=100'
+        do {
+            $memResp = Invoke-MgGraphRequest -Method GET -Uri $memUri -ErrorAction Stop
+            $memberships.AddRange([object[]]@($memResp.value))
+            $memUri = $memResp.'@odata.nextLink'
+        } while ($memUri)
     }
     catch {
         $result.Status  = 'Error'
@@ -118,7 +121,7 @@ function Step-CleanupPermissions {
         $result.Message = $summary -join '; '
     }
     else {
-        $result.Status  = 'Error'
+        $result.Status  = if ($summary.Count -gt 0) { 'Warning' } else { 'Error' }
         $summary += 'ERRORS: ' + ($errors -join '; ')
         $result.Message = $summary -join '; '
     }

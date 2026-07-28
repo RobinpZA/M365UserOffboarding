@@ -70,7 +70,7 @@ function Step-BlockSignIn {
         $result.Message = $messages -join '; '
     }
     elseif ($messages.Count -gt 0) {
-        $result.Status  = 'Error'
+        $result.Status  = 'Warning'
         $result.Message = ($messages -join '; ') + ' | ERRORS: ' + ($errors -join '; ')
     }
     else {

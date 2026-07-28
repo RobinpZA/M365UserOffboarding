@@ -114,8 +114,8 @@ Describe 'M365UserOffboarding Module' {
             }
         }
 
-        It 'Status is one of Success, Error, or Skipped' {
-            $script:StubResult.Status | Should -BeIn @('Success', 'Error', 'Skipped')
+        It 'Status is one of Success, Error, Skipped, WhatIf, or Warning' {
+            $script:StubResult.Status | Should -BeIn @('Success', 'Error', 'Skipped', 'WhatIf', 'Warning')
         }
     }
 }

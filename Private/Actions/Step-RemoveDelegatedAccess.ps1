@@ -115,7 +115,7 @@ function Step-RemoveDelegatedAccess {
         $result.Message = "$($removed.Count) permission(s) removed: $($removed -join ', ')"
     }
     else {
-        $result.Status  = 'Error'
+        $result.Status  = if ($removed.Count -gt 0) { 'Warning' } else { 'Error' }
         $parts = @()
         if ($removed.Count -gt 0) { $parts += "Removed: $($removed -join ', ')" }
         $parts += 'ERRORS: ' + ($errors -join '; ')

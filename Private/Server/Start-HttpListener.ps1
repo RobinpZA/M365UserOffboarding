@@ -39,6 +39,12 @@ function Start-OffboardingServer {
     Write-Host '  Press Ctrl+C or click "Close Server" in the portal to stop.' -ForegroundColor DarkGray
     Write-Host ''
 
+    # Auto-open the browser now that the correct port is confirmed. The listener is
+    # already bound at this point, so no delay or background job is needed —
+    # Start-Process returns immediately and leaves nothing to clean up.
+    try { Start-Process $url }
+    catch { Write-Warning "Could not open the browser automatically. Browse to $url manually." }
+
     try {
         while (-not $script:ServerStop) {
             if ($listener.Pending()) {

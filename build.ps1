@@ -52,7 +52,11 @@ function Install-BuildDependency {
 function Invoke-Analyze {
     Write-Host "`n=== PSScriptAnalyzer ===" -ForegroundColor Cyan
     $settings = Join-Path $PSScriptRoot 'PSScriptAnalyzerSettings.psd1'
-    $results  = Invoke-ScriptAnalyzer -Path $PSScriptRoot -Recurse -Settings $settings -ExcludePath @('build', 'Assets')
+    # Invoke-ScriptAnalyzer has no -ExcludePath parameter, so enumerate the files
+    # ourselves and drop the build output and portal assets before analysing.
+    $files = Get-ChildItem -Path $PSScriptRoot -Recurse -File -Include '*.ps1', '*.psm1', '*.psd1' |
+        Where-Object { $_.FullName -notmatch '[\\/](build|Assets)[\\/]' }
+    $results = @($files | ForEach-Object { Invoke-ScriptAnalyzer -Path $_.FullName -Settings $settings })
     if ($results) {
         $results | Format-Table -AutoSize
         throw "PSScriptAnalyzer found $($results.Count) issue(s)."

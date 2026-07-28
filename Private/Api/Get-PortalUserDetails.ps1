@@ -71,16 +71,20 @@ function Get-PortalUserDetails {
 
     # ── Group and role memberships ─────────────────────────────────────────────
     try {
-        $memUri  = '/v1.0/users/' + $UserId + '/memberOf?$select=id,displayName,@odata.type&$top=100'
-        $memResp = Invoke-MgGraphRequest -Method GET -Uri $memUri -ErrorAction SilentlyContinue
-        foreach ($m in $memResp.value) {
-            if ($m.'@odata.type' -eq '#microsoft.graph.group') {
-                $result.groups += $m.displayName
+        $memUri = '/v1.0/users/' + $UserId + '/memberOf?$select=id,displayName,@odata.type&$top=100'
+        do {
+            $memResp = Invoke-MgGraphRequest -Method GET -Uri $memUri -ErrorAction SilentlyContinue
+            if (-not $memResp) { break }
+            foreach ($m in $memResp.value) {
+                if ($m.'@odata.type' -eq '#microsoft.graph.group') {
+                    $result.groups += $m.displayName
+                }
+                elseif ($m.'@odata.type' -eq '#microsoft.graph.directoryRole') {
+                    $result.roles += $m.displayName
+                }
             }
-            elseif ($m.'@odata.type' -eq '#microsoft.graph.directoryRole') {
-                $result.roles += $m.displayName
-            }
-        }
+            $memUri = $memResp.'@odata.nextLink'
+        } while ($memUri)
     }
     catch {
         Write-Verbose "Get-PortalUserDetails: membership lookup suppressed for $UserId — $_"

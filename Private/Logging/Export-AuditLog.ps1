@@ -5,7 +5,7 @@ function Export-AuditLog {
     .PARAMETER ModuleRoot
         Root path of the module (used to resolve Output directory).
     .OUTPUTS
-        [string] Path of the generated HTML file.
+        [string[]] Two paths, in order: the generated HTML file and the generated CSV file.
     #>
     [CmdletBinding()]
     param(
@@ -32,12 +32,14 @@ function Export-AuditLog {
     $successCount = @($entries | Where-Object { $_.Status -eq 'Success' }).Count
     $errorCount   = @($entries | Where-Object { $_.Status -eq 'Error'   }).Count
     $skippedCount = @($entries | Where-Object { $_.Status -eq 'Skipped' }).Count
+    $warnCount    = @($entries | Where-Object { $_.Status -eq 'Warning' }).Count
 
     $rows = $entries | ForEach-Object {
         $badgeClass = switch ($_.Status) {
             'Success' { 'badge-green'  }
             'Error'   { 'badge-red'    }
             'Skipped' { 'badge-gray'   }
+            'Warning' { 'badge-orange' }
             default   { 'badge-blue'   }
         }
         "<tr>
@@ -64,16 +66,17 @@ function Export-AuditLog {
     .stat { background: #1a1d27; border: 1px solid #2e3347; border-radius: 8px; padding: 12px 20px; }
     .stat-value { font-size: 28px; font-weight: 700; }
     .stat-label { font-size: 12px; color: #64748b; }
-    .green { color: #22c55e; } .red { color: #ef4444; } .gray { color: #94a3b8; }
+    .green { color: #22c55e; } .red { color: #ef4444; } .gray { color: #94a3b8; } .orange { color: #f97316; }
     table { width: 100%; border-collapse: collapse; background: #1a1d27; border-radius: 8px; overflow: hidden; }
     th { background: #22263a; color: #94a3b8; text-align: left; padding: 10px 14px; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; }
     td { padding: 10px 14px; border-bottom: 1px solid #2e3347; font-size: 14px; }
     tr:last-child td { border-bottom: none; }
     .badge { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
-    .badge-green { background: #14532d; color: #22c55e; }
-    .badge-red   { background: #450a0a; color: #ef4444; }
-    .badge-gray  { background: #1e293b; color: #94a3b8; }
-    .badge-blue  { background: #1e3a5f; color: #60a5fa; }
+    .badge-green  { background: #14532d; color: #22c55e; }
+    .badge-red    { background: #450a0a; color: #ef4444; }
+    .badge-gray   { background: #1e293b; color: #94a3b8; }
+    .badge-orange { background: #422006; color: #f97316; }
+    .badge-blue   { background: #1e3a5f; color: #60a5fa; }
   </style>
 </head>
 <body>
@@ -82,6 +85,7 @@ function Export-AuditLog {
   <div class="summary">
     <div class="stat"><div class="stat-value green">$successCount</div><div class="stat-label">Succeeded</div></div>
     <div class="stat"><div class="stat-value red">$errorCount</div><div class="stat-label">Failed</div></div>
+    <div class="stat"><div class="stat-value orange">$warnCount</div><div class="stat-label">Partial</div></div>
     <div class="stat"><div class="stat-value gray">$skippedCount</div><div class="stat-label">Skipped</div></div>
     <div class="stat"><div class="stat-value">$($entries.Count)</div><div class="stat-label">Total actions</div></div>
   </div>
@@ -99,5 +103,5 @@ function Export-AuditLog {
     Write-Host "    HTML: $htmlPath" -ForegroundColor Green
     Write-Host "    CSV:  $csvPath"  -ForegroundColor Green
 
-    return $htmlPath
+    return $htmlPath, $csvPath
 }

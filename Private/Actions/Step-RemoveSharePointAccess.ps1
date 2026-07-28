@@ -3,9 +3,10 @@ function Step-RemoveSharePointAccess {
     .SYNOPSIS
         Removes the user from SharePoint site memberships using the Microsoft Graph sites API.
     .NOTES
-        Scans up to 100 sites. Sites where the user has permissions through a group are handled
-        by the CleanupPermissions step (group membership removal). Direct site permissions are
-        removed here. Requires Sites.FullControl.All.
+        Scans up to 100 sites and makes one Graph /permissions call per site (N+1 pattern).
+        This is a platform limitation — Graph has no endpoint to list sites by direct user access.
+        Expect 1–10 seconds per 100 sites. Sites where the user has permissions through a group
+        are handled by the CleanupPermissions step. Requires Sites.FullControl.All.
     #>
     [CmdletBinding()]
     param(
@@ -117,7 +118,7 @@ function Step-RemoveSharePointAccess {
         $result.Message = "Direct site permissions removed from $($removed.Count) site(s): $($removed -join ', ')"
     }
     else {
-        $result.Status  = 'Error'
+        $result.Status  = if ($removed.Count -gt 0) { 'Warning' } else { 'Error' }
         $parts = @()
         if ($removed.Count -gt 0) { $parts += "Removed from: $($removed -join ', ')" }
         $parts += 'ERRORS: ' + ($errors -join '; ')
