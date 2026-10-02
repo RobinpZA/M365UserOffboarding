@@ -23,7 +23,6 @@
       TransferOneDrive:      { enabled: true,  label: 'Transfer OneDrive to Manager',           config: null },
       RemoveTeamsAndDLs:     { enabled: true,  label: 'Remove from Teams & Distribution Lists', config: null },
       RemoveDelegatedAccess: { enabled: true,  label: 'Remove Delegated Mailbox Access',        config: null },
-      RemoveSharePoint:      { enabled: true,  label: 'Remove SharePoint Memberships',          config: null },
       DisableMfa:            { enabled: true,  label: 'Disable / Reset MFA Methods',            config: null },
     },
   };

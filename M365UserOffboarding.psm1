@@ -13,6 +13,8 @@ $script:ExpectedTenantId = ''   # Set by Start-M365UserOffboarding -TenantId; em
 $script:ConnectedAs      = ''
 $script:HasIntuneLicense = $false
 $script:CsrfToken        = ''
+$script:AuditDir         = Join-Path $HOME 'M365UserOffboarding' 'Output' 'AuditLogs'
+$script:AuditStamp       = ''   # Session timestamp shared by the live CSV and the HTML report
 # Cursor cache for Graph user pagination (keyed by "$search|$pageNumber" → nextLink URL)
 $script:UserPageCursors  = @{}
 

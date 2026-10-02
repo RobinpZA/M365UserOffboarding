@@ -3,7 +3,9 @@ function Step-TransferOneDrive {
     .SYNOPSIS
         Grants the user's manager write access to their OneDrive, enabling data retrieval before the account is deleted.
     .NOTES
-        Requires Sites.FullControl.All permission.
+        Uses delegated Files.ReadWrite.All, which only reaches drives the signed-in admin
+        can already open. When the admin is not a site collection admin of the user's
+        OneDrive the invite is refused, and the result explains the manual route.
         If the user has no manager, the step is skipped with a warning.
     #>
     [CmdletBinding()]
@@ -32,8 +34,15 @@ function Step-TransferOneDrive {
         $managerUpn = $mgr.userPrincipalName
     }
     catch {
-        $result.Status  = 'Skipped'
-        $result.Message = 'No manager found for user — OneDrive access not transferred. Assign manually via SharePoint admin.'
+        $errFull = $_.Exception.Message + ' ' + ($_.ErrorDetails?.Message ?? '')
+        if ($errFull -match 'Request_ResourceNotFound|ResourceNotFound|404') {
+            $result.Status  = 'Skipped'
+            $result.Message = 'No manager set for user — OneDrive access not transferred. Assign manually via SharePoint admin.'
+        }
+        else {
+            $result.Status  = 'Error'
+            $result.Message = "Manager lookup failed: $_"
+        }
         return $result
     }
 
@@ -62,11 +71,13 @@ function Step-TransferOneDrive {
         return $result
     }
     # ── Get user's OneDrive ───────────────────────────────────────────────────
-    $driveId = ''
+    $driveId  = ''
+    $driveUrl = ''
     try {
         $driveUri = '/v1.0/users/' + $UserId + '/drive?$select=id,webUrl'
         $drive    = Invoke-MgGraphRequest -Method GET -Uri $driveUri -ErrorAction Stop
         $driveId  = $drive.id
+        $driveUrl = $drive.webUrl
     }
     catch {
         # 404 ResourceNotFound means the user never had a OneDrive provisioned.
@@ -100,11 +111,20 @@ function Step-TransferOneDrive {
             -ErrorAction Stop | Out-Null
 
         $result.Status  = 'Success'
-        $result.Message = "Write access to OneDrive granted to manager: $managerUpn"
+        $result.Message = "Write access to OneDrive granted to manager: $managerUpn — $driveUrl"
     }
     catch {
-        $result.Status  = 'Error'
-        $result.Message = "Failed to grant OneDrive access to manager: $_"
+        $errFull = $_.Exception.Message + ' ' + ($_.ErrorDetails?.Message ?? '')
+        $result.Status = 'Error'
+        if ($errFull -match 'accessDenied|Forbidden|403') {
+            $result.Message = "Access denied to this OneDrive — the signed-in admin is not a site collection admin of it. " +
+                              "Grant $managerUpn access manually with SharePoint Online PowerShell: " +
+                              "Set-SPOUser -Site '$driveUrl' -LoginName '$managerUpn' -IsSiteCollectionAdmin `$true " +
+                              "(or use Microsoft 365 admin center > Users > $UserUPN > OneDrive to get access yourself, then share it)"
+        }
+        else {
+            $result.Message = "Failed to grant OneDrive access to manager: $_"
+        }
     }
 
     return $result

@@ -24,32 +24,51 @@ function Step-BlockSignIn {
     $messages = [System.Collections.Generic.List[string]]::new()
     $errors   = [System.Collections.Generic.List[string]]::new()
 
+    # ── Current state ─────────────────────────────────────────────────────────
+    # Synced (hybrid) accounts are mastered on-premises: Graph refuses to change
+    # accountEnabled, and the next sync would undo it anyway.
+    $currentStatus = 'status unknown'
+    $isSynced      = $false
+    try {
+        $userInfo = Invoke-MgGraphRequest -Method GET `
+            -Uri ('/v1.0/users/' + $UserId + '?$select=accountEnabled,onPremisesSyncEnabled') `
+            -ErrorAction Stop
+        $currentStatus = if ($userInfo.accountEnabled) { 'currently enabled' } else { 'already blocked' }
+        $isSynced      = $userInfo.onPremisesSyncEnabled -eq $true
+    }
+    catch {
+        Write-Verbose "Step-BlockSignIn: state lookup suppressed for $UserId — $_"
+    }
+    $syncedNote = 'Account is synced from on-premises AD — disable it in on-premises AD; a cloud-only block would be overwritten at the next sync'
+
     # ── What-If: describe changes without applying them ───────────────────────
     if ($WhatIf) {
-        $currentStatus = 'status unknown'
-        try {
-            $userInfo = Invoke-MgGraphRequest -Method GET `
-                -Uri ('/v1.0/users/' + $UserId + '?$select=accountEnabled') `
-                -ErrorAction Stop
-            $currentStatus = if ($userInfo.accountEnabled) { 'currently enabled' } else { 'already blocked' }
-        }
-        catch { }
         $result.Status  = 'WhatIf'
-        $result.Message = "Would block sign-in ($currentStatus) and revoke all active sessions"
+        $result.Message = if ($isSynced) {
+            "Would revoke all active sessions; would NOT block sign-in. $syncedNote"
+        }
+        else {
+            "Would block sign-in ($currentStatus) and revoke all active sessions"
+        }
         return $result
     }
 
     # ── Block sign-in ─────────────────────────────────────────────────────────
-    try {
-        Invoke-MgGraphRequest -Method PATCH `
-            -Uri ('/v1.0/users/' + $UserId) `
-            -Body (@{ accountEnabled = $false } | ConvertTo-Json -Compress) `
-            -ContentType 'application/json' `
-            -ErrorAction Stop
-        $messages.Add('Sign-in blocked (accountEnabled = false)')
+    if ($isSynced) {
+        $errors.Add($syncedNote)
     }
-    catch {
-        $errors.Add("Block sign-in failed: $_")
+    else {
+        try {
+            Invoke-MgGraphRequest -Method PATCH `
+                -Uri ('/v1.0/users/' + $UserId) `
+                -Body (@{ accountEnabled = $false } | ConvertTo-Json -Compress) `
+                -ContentType 'application/json' `
+                -ErrorAction Stop
+            $messages.Add('Sign-in blocked (accountEnabled = false)')
+        }
+        catch {
+            $errors.Add("Block sign-in failed: $_")
+        }
     }
 
     # ── Revoke all refresh tokens / sessions ──────────────────────────────────
