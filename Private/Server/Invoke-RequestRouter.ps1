@@ -101,6 +101,7 @@ function Invoke-RequestRouter {
             Body        = $body
             Stream      = $stream
             ModuleRoot  = $ModuleRoot
+            LocalPort   = ([System.Net.IPEndPoint]$Client.Client.LocalEndPoint).Port
         }
 
         Invoke-Route -Context $ctx
@@ -130,6 +131,22 @@ function Invoke-Route {
     $headers    = $Context.Headers
 
     try {
+        # ── DNS-rebinding guard ───────────────────────────────────────────────────
+        # A hostile page can rebind its own hostname to 127.0.0.1 and then read
+        # /api/context (including the CSRF token) as same-origin. Only answer
+        # requests addressed to the loopback names this server actually uses.
+        $port         = $Context.LocalPort
+        $allowedHosts = @("127.0.0.1:$port", "localhost:$port")
+        if ($headers['host'] -notin $allowedHosts) {
+            Write-ErrorResponse -Stream $stream -Message 'Invalid Host header' -StatusCode 403
+            return
+        }
+        if ($method -eq 'POST' -and $headers['origin'] -and
+            $headers['origin'] -notin @("http://127.0.0.1:$port", "http://localhost:$port")) {
+            Write-ErrorResponse -Stream $stream -Message 'Cross-origin request refused' -StatusCode 403
+            return
+        }
+
         # ── CSRF guard — validate token on all state-changing POST requests ───────
         if ($method -eq 'POST') {
             $clientToken = $headers['x-csrf-token']
@@ -195,7 +212,8 @@ function Invoke-Route {
                 try {
                     $auth = Connect-OffboardingServices
                     if (-not $auth.Graph) {
-                        Write-JsonResponse -Stream $stream -Data @{ error = 'Failed to connect to Microsoft Graph.' } -StatusCode 500
+                        $msg = if ($auth.Error) { [string]$auth.Error } else { 'Failed to connect to Microsoft Graph.' }
+                        Write-JsonResponse -Stream $stream -Data @{ error = $msg } -StatusCode 500
                         return
                     }
                     Write-JsonResponse -Stream $stream -Data @{

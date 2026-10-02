@@ -1,10 +1,14 @@
 function Step-SecureDevice {
     <#
     .SYNOPSIS
-        Retires (BYOD) or wipes (company) Intune-managed devices belonging to the user.
+        Retires or wipes the user's Intune-managed devices, chosen per device by ownership.
     .NOTES
         Config keys:
-          action — 'Wipe' (retire BYOD — removes company data) or 'Reset' (full factory wipe)
+          companyAction — what to do with company-owned devices: 'Retire' (default,
+                          removes company data) or 'Wipe' (full factory reset)
+
+        Personal (BYOD) devices and devices with unknown ownership are always retired,
+        never wiped, so an employee's own phone is never factory-reset.
 
         This step is automatically skipped if the tenant has no Intune licence
         or if the user has no managed devices.
@@ -34,7 +38,7 @@ function Step-SecureDevice {
         return $result
     }
 
-    $action = ($Config['action'] ?? 'Wipe').Trim()
+    $companyAction = if (($Config['companyAction'] ?? '').Trim() -eq 'Wipe') { 'Wipe' } else { 'Retire' }
 
     # ── Get managed devices ───────────────────────────────────────────────────
     $devices = @()
@@ -57,25 +61,36 @@ function Step-SecureDevice {
         return $result
     }
 
+    # Only devices Intune reports as company-owned can be wiped.
+    $plan = @($devices | ForEach-Object {
+        @{
+            Device = $_
+            Name   = $_.deviceName ?? $_.id
+            Action = if ($_.managedDeviceOwnerType -eq 'company') { $companyAction } else { 'Retire' }
+        }
+    })
+
     # ── What-If: describe changes without applying them ───────────────────────
     if ($WhatIf) {
-        $actionLabel   = if ($action -eq 'Reset') { 'factory wipe' } else { 'retire (remove company data)' }
-        $deviceNames   = $devices | ForEach-Object { $_.deviceName ?? $_.id }
+        $lines = $plan | ForEach-Object {
+            $label = if ($_.Action -eq 'Wipe') { 'factory wipe' } else { 'retire' }
+            "$label '$($_.Name)' ($($_.Device.managedDeviceOwnerType ?? 'unknown'))"
+        }
         $result.Status  = 'WhatIf'
-        $result.Message = "Would $actionLabel $($devices.Count) device(s): $($deviceNames -join ', ')"
+        $result.Message = "Would $($lines -join '; ')"
         return $result
     }
 
     $messages = [System.Collections.Generic.List[string]]::new()
     $errors   = [System.Collections.Generic.List[string]]::new()
 
-    foreach ($device in $devices) {
-        $deviceId   = $device.id
-        $deviceName = $device.deviceName ?? $deviceId
+    foreach ($item in $plan) {
+        $deviceId   = $item.Device.id
+        $deviceName = $item.Name
 
         try {
-            if ($action -eq 'Reset') {
-                # Full factory wipe — company-owned devices
+            if ($item.Action -eq 'Wipe') {
+                # Full factory wipe — company-owned devices only
                 Invoke-MgGraphRequest -Method POST `
                     -Uri ('/v1.0/deviceManagement/managedDevices/' + $deviceId + '/wipe') `
                     -Body (@{ keepEnrollmentData = $false; keepUserData = $false } | ConvertTo-Json -Compress) `
@@ -84,7 +99,7 @@ function Step-SecureDevice {
                 $messages.Add("Device '$deviceName' wiped (full reset)")
             }
             else {
-                # Retire — removes company data from BYOD device
+                # Retire — removes company data, leaves personal data
                 Invoke-MgGraphRequest -Method POST `
                     -Uri ('/v1.0/deviceManagement/managedDevices/' + $deviceId + '/retire') `
                     -Body '{}' `
