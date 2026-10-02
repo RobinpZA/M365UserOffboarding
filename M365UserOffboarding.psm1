@@ -9,6 +9,7 @@ $script:ServerStop       = $false
 $script:Connected        = $false
 $script:TenantName       = ''
 $script:TenantId         = ''
+$script:ExpectedTenantId = ''   # Set by Start-M365UserOffboarding -TenantId; empty = any tenant
 $script:ConnectedAs      = ''
 $script:HasIntuneLicense = $false
 $script:CsrfToken        = ''

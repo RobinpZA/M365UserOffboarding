@@ -4,7 +4,7 @@ function Connect-OffboardingServices {
         Authenticates to Microsoft Graph and Exchange Online for offboarding operations.
     .OUTPUTS
         [hashtable] with keys: Graph ($true/$false), Exchange ($true/$false),
-        TenantName, TenantId, ConnectedAs, HasIntuneLicense
+        TenantName, TenantId, ConnectedAs, HasIntuneLicense, Error
     #>
     [CmdletBinding()]
     param()
@@ -38,6 +38,7 @@ function Connect-OffboardingServices {
         TenantId        = ''
         ConnectedAs     = ''
         HasIntuneLicense = $false
+        Error            = ''
     }
 
     $requiredScopes = @(
@@ -60,10 +61,22 @@ function Connect-OffboardingServices {
     Write-Host ''
     Write-Host '  Connecting to Microsoft Graph...' -ForegroundColor Cyan
     try {
-        Connect-MgGraph -Scopes $requiredScopes -NoWelcome -ErrorAction Stop
+        $mgParams = @{ Scopes = $requiredScopes; NoWelcome = $true; ErrorAction = 'Stop' }
+        if ($script:ExpectedTenantId) { $mgParams.TenantId = $script:ExpectedTenantId }
+        Connect-MgGraph @mgParams
 
         $org  = Invoke-MgGraphRequest -Method GET -Uri '/v1.0/organization?$select=displayName,id' -ErrorAction Stop
         $me   = Invoke-MgGraphRequest -Method GET -Uri '/v1.0/me?$select=userPrincipalName,displayName' -ErrorAction Stop
+
+        # Connect-MgGraph can reuse a cached context for another tenant, so check
+        # where the token actually points before anything is allowed to write.
+        $ctxTenant = (Get-MgContext).TenantId
+        if ($ctxTenant -ne $org.value[0].id) {
+            throw "Graph context tenant ($ctxTenant) does not match organisation ($($org.value[0].id))."
+        }
+        if ($script:ExpectedTenantId -and $ctxTenant -ne $script:ExpectedTenantId) {
+            throw "Signed in to tenant $ctxTenant, but -TenantId $($script:ExpectedTenantId) was requested."
+        }
 
         $status.TenantName  = $org.value[0].displayName
         $status.TenantId    = $org.value[0].id
@@ -74,6 +87,9 @@ function Connect-OffboardingServices {
     }
     catch {
         Write-Host "  [FAIL] Microsoft Graph: $_" -ForegroundColor Red
+        try { $null = Disconnect-MgGraph -ErrorAction Stop } catch { Write-Verbose "Graph disconnect suppressed: $_" }
+        $status.Graph = $false
+        $status.Error = "Microsoft Graph: $_"
         return $status
     }
 
@@ -98,7 +114,20 @@ function Connect-OffboardingServices {
     try {
         Import-Module ExchangeOnlineManagement -ErrorAction Stop
 
-        Connect-ExchangeOnline -ShowBanner:$false -ErrorAction Stop
+        # Hint the same account so Exchange signs in where Graph did.
+        Connect-ExchangeOnline -UserPrincipalName $status.ConnectedAs -ShowBanner:$false -ErrorAction Stop
+
+        $exo = Get-ConnectionInformation | Where-Object { $_.State -eq 'Connected' } | Select-Object -Last 1
+        if (-not $exo -or $exo.TenantID -ne $status.TenantId) {
+            Disconnect-ExchangeOnline -Confirm:$false -ErrorAction SilentlyContinue | Out-Null
+            $null = Disconnect-MgGraph -ErrorAction SilentlyContinue
+            $msg = "Exchange Online connected to tenant '$($exo.TenantID)', but Graph is on '$($status.TenantId)'. Both connections closed — sign in with one account for one tenant."
+            Write-Host "  [FAIL] $msg" -ForegroundColor Red
+            $status.Graph = $false
+            $status.Error = $msg
+            return $status
+        }
+
         $status.Exchange = $true
         Write-Host '  [OK] Exchange Online' -ForegroundColor Green
     }

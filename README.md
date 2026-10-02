@@ -26,8 +26,8 @@ A PowerShell module that launches an interactive local web portal for offboardin
 | 2 | **Block Sign-In & Revoke Sessions** | Disables the account and revokes all active refresh tokens |
 | 3 | **Convert to Shared Mailbox** | Converts the mailbox to shared and optionally grants a delegate FullAccess + SendAs |
 | 4 | **Set Out of Office** | Enables auto-reply with configurable internal and external messages |
-| 5 | **Secure Device (Intune)** | Retires (BYOD) or fully wipes company-managed devices — skipped if no Intune licence |
-| 6 | **Remove All Licences** | Removes every assigned Microsoft 365 licence in a single Graph call |
+| 5 | **Secure Device (Intune)** | Personal (BYOD) devices are always retired; company-owned devices are retired or factory-wiped (your choice) — skipped if no Intune licence |
+| 6 | **Remove All Licences** | Removes every assigned licence in one Graph call. Not run if the mailbox conversion failed, or if the mailbox still needs a licence (over 50 GB, archive active, or on hold). If Convert to Shared Mailbox is off, it runs with a warning: the mailbox is permanently deleted 30 days later |
 | 7 | **Transfer OneDrive to Manager** | Grants the user's manager write access to their OneDrive for data retrieval |
 | 8 | **Remove from Teams & Distribution Lists** | Removes membership from all Teams and mail-enabled distribution groups |
 | 9 | **Remove Delegated Mailbox Access** | Revokes any delegated permissions this user holds on other mailboxes |
@@ -110,7 +110,17 @@ Start-M365UserOffboarding
 
 # Start the portal on a custom port
 Start-M365UserOffboarding -Port 9090
+
+# Pin sign-in to one tenant (recommended for MSP use)
+Start-M365UserOffboarding -TenantId 00000000-0000-0000-0000-000000000000
 ```
+
+### Safety checks
+
+- Graph and Exchange Online must sign in to the same tenant, or the portal refuses to connect. With `-TenantId`, both must also match that tenant.
+- The tenant is checked again right before every run.
+- A live run asks you to type **OFFBOARD** first. What-If preview does not.
+- The local server only answers requests addressed to `127.0.0.1` or `localhost` on its own port, which blocks DNS-rebinding attacks from other websites.
 
 On launch the module will:
 

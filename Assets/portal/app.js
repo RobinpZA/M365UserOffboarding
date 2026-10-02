@@ -18,7 +18,7 @@
       BlockSignIn:           { enabled: true,  label: 'Block Sign-In & Revoke Sessions',        config: null },
       ConvertSharedMailbox:  { enabled: true,  label: 'Convert to Shared Mailbox',              config: { delegateUpn: '', hideFromGal: false } },
       SetOutOfOffice:        { enabled: true,  label: 'Set Out of Office',                      config: { internalMessage: '', message: '' } },
-      SecureDevice:          { enabled: true,  label: 'Secure Device (Intune)',                 config: { action: 'Wipe' }, conditional: true },
+      SecureDevice:          { enabled: true,  label: 'Secure Device (Intune)',                 config: { companyAction: 'Retire' }, conditional: true },
       RemoveLicenses:        { enabled: true,  label: 'Remove All Licences',                    config: null },
       TransferOneDrive:      { enabled: true,  label: 'Transfer OneDrive to Manager',           config: null },
       RemoveTeamsAndDLs:     { enabled: true,  label: 'Remove from Teams & Distribution Lists', config: null },
@@ -515,6 +515,12 @@
   }
 
   function renderStepConfigHTML(key, step) {
+    if (key === 'RemoveLicenses') {
+      const hidden = state.steps.ConvertSharedMailbox.enabled ? ' hidden' : '';
+      return `<p class="dim licence-deletion-note"${hidden} style="color:var(--warning)">
+        ⚠ Convert to Shared Mailbox is off — the mailbox will be permanently deleted 30 days after licences are removed.
+      </p>`;
+    }
     if (!step.config) return '';
     if (key === 'ConvertSharedMailbox') {
       return `<div class="step-config">
@@ -544,12 +550,13 @@
     }
     if (key === 'SecureDevice') {
       return `<div class="step-config">
-        <label>Device action
-          <select class="config-input" data-key="${key}" data-field="action">
-            <option value="Wipe"  ${step.config.action === 'Wipe'  ? 'selected' : ''}>Retire / Wipe — remove company data (BYOD)</option>
-            <option value="Reset" ${step.config.action === 'Reset' ? 'selected' : ''}>Factory Reset — full wipe (company-owned device)</option>
+        <label>Company-owned devices
+          <select class="config-input" data-key="${key}" data-field="companyAction">
+            <option value="Retire" ${step.config.companyAction === 'Retire' ? 'selected' : ''}>Retire — remove company data</option>
+            <option value="Wipe"   ${step.config.companyAction === 'Wipe'   ? 'selected' : ''}>Wipe — full factory reset</option>
           </select>
         </label>
+        <p class="dim">Personal (BYOD) and unknown-ownership devices are always retired, never wiped.</p>
       </div>`;
     }
     return '';
@@ -563,6 +570,10 @@
         const card = e.target.closest('.step-card');
         card.classList.toggle('enabled',  e.target.checked);
         card.classList.toggle('disabled', !e.target.checked);
+        if (key === 'ConvertSharedMailbox') {
+          const note = document.querySelector('.licence-deletion-note');
+          if (note) note.hidden = e.target.checked;
+        }
       });
     });
 
@@ -653,6 +664,20 @@
     Object.entries(state.steps).forEach(([key, step]) => {
       stepsPayload[key] = { enabled: step.enabled, ...(step.config || {}) };
     });
+
+    // Live runs disable accounts, remove licences and can wipe devices — make the
+    // operator type a word, not just click OK on reflex.
+    if (!whatIf) {
+      const stepCount = Object.values(state.steps).filter(s => s.enabled).length;
+      const typed = prompt(
+        `LIVE RUN: ${stepCount} step(s) will make real changes to ${userIds.length} user(s). ` +
+        `This cannot be undone.\n\nType OFFBOARD to continue.`
+      );
+      if ((typed || '').trim().toUpperCase() !== 'OFFBOARD') {
+        toast('Offboarding cancelled — nothing was changed.', 'info');
+        return;
+      }
+    }
 
     setLoading(true);
     toast(

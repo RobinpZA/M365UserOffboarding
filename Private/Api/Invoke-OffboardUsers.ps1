@@ -26,6 +26,13 @@ function Invoke-OffboardUsers {
         return @{ success = $false; error = 'No steps configuration provided' }
     }
 
+    # Re-check the tenant right before acting: the Graph context is process-wide
+    # and could have been switched since the portal connected.
+    $ctxTenant = (Get-MgContext).TenantId
+    if (-not $script:TenantId -or $ctxTenant -ne $script:TenantId) {
+        return @{ success = $false; error = "Tenant check failed: Graph is on '$ctxTenant', portal connected to '$($script:TenantId)'. Disconnect and reconnect." }
+    }
+
     # Ordered step map: key → function name
     # CleanupPermissions runs FIRST: admin roles must be removed before Graph
     # will accept a sign-in block (PATCH accountEnabled) on a privileged user.
@@ -88,12 +95,37 @@ function Invoke-OffboardUsers {
                 continue
             }
 
+            # Removing licences from a mailbox that is still a user mailbox starts the
+            # 30-day soft-delete clock — never do that when the shared conversion failed.
+            if ($stepKey -eq 'RemoveLicenses' -and -not $isWhatIf) {
+                $convert = $userResult.steps | Where-Object { $_.Step -eq 'ConvertSharedMailbox' } | Select-Object -First 1
+                if ($convert -and $convert.Status -eq 'Error') {
+                    $blocked = [PSCustomObject]@{
+                        Step      = $stepKey
+                        StepLabel = 'Remove All Licences'
+                        UserId    = $userId
+                        UserUPN   = $userResult.userUPN
+                        Status    = 'Skipped'
+                        Message   = 'Not run: mailbox conversion to Shared failed, removing licences would delete the mailbox after 30 days'
+                        Timestamp = (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
+                    }
+                    $userResult.steps.Add($blocked)
+                    Write-AuditEntry -Entry $blocked
+                    Write-Host "    [$stepKey] Skipped: mailbox conversion failed" -ForegroundColor Yellow
+                    continue
+                }
+            }
+
             # Build config hashtable (everything except 'enabled')
             $config = @{}
             if ($stepCfg) {
                 foreach ($k in $stepCfg.Keys) {
                     if ($k -ne 'enabled') { $config[$k] = $stepCfg[$k] }
                 }
+            }
+            if ($stepKey -eq 'RemoveLicenses') {
+                $convertCfg = $stepsConfig['ConvertSharedMailbox']
+                $config['convertSharedEnabled'] = [bool]($convertCfg -and $convertCfg['enabled'] -eq $true)
             }
 
             Write-Host "    [$stepKey] running..." -ForegroundColor DarkGray

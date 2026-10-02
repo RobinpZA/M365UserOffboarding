@@ -6,6 +6,9 @@ function Start-M365UserOffboarding {
         Starts a local HTTP portal on 127.0.0.1 (default port 8080). Authentication
         to Microsoft Graph and Exchange Online is performed interactively from within
         the portal — click "Connect to Microsoft 365" on the landing screen.
+    .PARAMETER TenantId
+        Tenant ID (GUID) to connect to. When set, sign-in is pinned to this tenant
+        and the portal refuses to connect if Graph or Exchange land anywhere else.
     .PARAMETER Port
         Starting port for the portal server. Tries 8080–8089 if the preferred port
         is already in use.
@@ -13,9 +16,14 @@ function Start-M365UserOffboarding {
         Start-M365UserOffboarding
     .EXAMPLE
         Start-M365UserOffboarding -Port 9090
+    .EXAMPLE
+        Start-M365UserOffboarding -TenantId 00000000-0000-0000-0000-000000000000
     #>
     [CmdletBinding()]
     param(
+        [ValidatePattern('^[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$')]
+        [string]$TenantId = '',
+
         [ValidateRange(1024, 65535)]
         [int]$Port = 8080
     )
@@ -36,6 +44,7 @@ function Start-M365UserOffboarding {
     $script:Connected        = $false
     $script:TenantName       = ''
     $script:TenantId         = ''
+    $script:ExpectedTenantId = $TenantId
     $script:ConnectedAs      = ''
     $script:HasIntuneLicense = $false
     $script:CsrfToken        = [System.Convert]::ToBase64String(
