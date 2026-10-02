@@ -22,6 +22,11 @@ function Invoke-OffboardUsers {
     if (-not $userIds -or $userIds.Count -eq 0) {
         return @{ success = $false; error = 'No users specified' }
     }
+    # User IDs are concatenated into Graph URLs, so only accept object IDs (GUIDs).
+    $badIds = @($userIds | Where-Object { -not [guid]::TryParse([string]$_, [ref][guid]::Empty) })
+    if ($badIds.Count -gt 0) {
+        return @{ success = $false; error = "Invalid user ID(s): $($badIds -join ', ')" }
+    }
     if (-not $stepsConfig) {
         return @{ success = $false; error = 'No steps configuration provided' }
     }
@@ -46,7 +51,6 @@ function Invoke-OffboardUsers {
         'TransferOneDrive'      = 'Step-TransferOneDrive'
         'RemoveTeamsAndDLs'     = 'Step-RemoveTeamsAndDLs'
         'RemoveDelegatedAccess' = 'Step-RemoveDelegatedAccess'
-        'RemoveSharePoint'      = 'Step-RemoveSharePointAccess'
         'DisableMfa'            = 'Step-DisableMfa'
     }
 

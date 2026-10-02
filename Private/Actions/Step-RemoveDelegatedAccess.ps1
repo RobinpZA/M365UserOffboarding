@@ -1,11 +1,11 @@
 function Step-RemoveDelegatedAccess {
     <#
     .SYNOPSIS
-        Removes mailbox permissions that this user had been granted on other users' mailboxes.
+        Removes mailbox permissions that this user had been granted on other mailboxes.
     .NOTES
-        Covers SendAs (RecipientPermission) which can be queried tenant-wide.
-        FullAccess (MailboxPermission) requires scanning per-mailbox; a best-effort scan
-        of the 200 most recently active mailboxes is performed, with a note in the output.
+        Covers SendAs and Send on Behalf (both queried tenant-wide) and FullAccess.
+        FullAccess has no tenant-wide query, so every user, shared, room and equipment
+        mailbox is checked one by one — expect roughly 1–2 minutes per 500 mailboxes.
     #>
     [CmdletBinding()]
     param(
@@ -27,86 +27,101 @@ function Step-RemoveDelegatedAccess {
 
     $removed = [System.Collections.Generic.List[string]]::new()
     $errors  = [System.Collections.Generic.List[string]]::new()
-    # ── What-If: describe changes without applying them ───────────────────────
-    if ($WhatIf) {
-        $found = [System.Collections.Generic.List[string]]::new()
-        try {
-            @(Get-RecipientPermission -Trustee $UserUPN -ErrorAction SilentlyContinue) |
-                ForEach-Object { $found.Add("SendAs on $($_.Identity)") }
-        }
-        catch { }
-        try {
-            @(Get-Mailbox -RecipientTypeDetails SharedMailbox -ResultSize 500 -ErrorAction SilentlyContinue) |
-                ForEach-Object {
-                    try {
-                        @(Get-MailboxPermission -Identity $_.PrimarySmtpAddress -User $UserUPN -ErrorAction SilentlyContinue) |
-                            Where-Object { $_.AccessRights -contains 'FullAccess' } |
-                            ForEach-Object { $found.Add("FullAccess on $($_.Identity)") }
-                    }
-                    catch { }
-                }
-        }
-        catch { }
-        $result.Status  = 'WhatIf'
-        $result.Message = if ($found.Count -gt 0) {
-            "Would remove $($found.Count) delegated permission(s): $($found -join ', ')"
-        } else {
-            'No delegated mailbox permissions found — no action would be taken'
-        }
-        return $result
-    }
-    # ── SendAs permissions (tenant-wide query available) ──────────────────────
+
+    # Each finding: Kind (SendAs | SendOnBehalf | FullAccess), Mailbox (identity), Label
+    # A user with no mail-enabled recipient cannot hold SendAs or Send on Behalf, so
+    # "not found" from those lookups means "nothing to remove", not a failure.
+    $notFound = { param($err) "$($err.Exception.Message) $($err.ErrorDetails?.Message)" -match "couldn't be found|ManagementObjectNotFound" }
+    $found = [System.Collections.Generic.List[hashtable]]::new()
+
+    # ── SendAs ────────────────────────────────────────────────────────────────
     try {
-        $sendAsPerms = @(Get-RecipientPermission -Trustee $UserUPN -ErrorAction SilentlyContinue)
-        foreach ($perm in $sendAsPerms) {
-            try {
-                Remove-RecipientPermission `
-                    -Identity   $perm.Identity `
-                    -Trustee    $UserUPN `
-                    -AccessRights SendAs `
-                    -Confirm:$false `
-                    -ErrorAction Stop
-                $removed.Add("SendAs on $($perm.Identity)")
-            }
-            catch {
-                $errors.Add("SendAs remove '$($perm.Identity)': $_")
-            }
-        }
+        @(Get-RecipientPermission -Trustee $UserUPN -ResultSize Unlimited -ErrorAction Stop) |
+            Where-Object { $_.AccessRights -contains 'SendAs' } |
+            ForEach-Object { $found.Add(@{ Kind = 'SendAs'; Mailbox = $_.Identity; Label = "SendAs on $($_.Identity)" }) }
     }
     catch {
-        $errors.Add("Failed to query SendAs permissions: $_")
+        if (-not (& $notFound $_)) { $errors.Add("SendAs query failed: $_") }
     }
 
-    # ── FullAccess permissions (best-effort scan of shared mailboxes) ──────────
+    # ── Send on Behalf ────────────────────────────────────────────────────────
     try {
-        $sharedMailboxes = @(Get-Mailbox -RecipientTypeDetails SharedMailbox -ResultSize 500 -ErrorAction SilentlyContinue)
-        foreach ($mbx in $sharedMailboxes) {
+        $dn = (Get-Recipient -Identity $UserUPN -ErrorAction Stop).DistinguishedName
+        @(Get-Mailbox -Filter "GrantSendOnBehalfTo -eq '$dn'" -ResultSize Unlimited -ErrorAction Stop) |
+            ForEach-Object { $found.Add(@{ Kind = 'SendOnBehalf'; Mailbox = $_.PrimarySmtpAddress; Label = "Send on Behalf on $($_.PrimarySmtpAddress)" }) }
+    }
+    catch {
+        if (-not (& $notFound $_)) { $errors.Add("Send on Behalf query failed: $_") }
+    }
+
+    # ── FullAccess (per-mailbox scan) ─────────────────────────────────────────
+    $scanFailures = [System.Collections.Generic.List[string]]::new()
+    $scanned      = 0
+    try {
+        $mailboxes = @(Get-Mailbox -RecipientTypeDetails UserMailbox, SharedMailbox, RoomMailbox, EquipmentMailbox `
+                                   -ResultSize Unlimited -ErrorAction Stop |
+                       Where-Object { $_.ExternalDirectoryObjectId -ne $UserId })
+        foreach ($mbx in $mailboxes) {
+            $scanned++
+            if ($scanned % 250 -eq 0) {
+                Write-Host "      FullAccess scan: $scanned / $($mailboxes.Count) mailboxes" -ForegroundColor DarkGray
+            }
             try {
-                $perms = @(Get-MailboxPermission -Identity $mbx.PrimarySmtpAddress -User $UserUPN -ErrorAction SilentlyContinue)
-                foreach ($perm in $perms) {
-                    if ($perm.AccessRights -contains 'FullAccess') {
-                        Remove-MailboxPermission `
-                            -Identity    $mbx.PrimarySmtpAddress `
-                            -User        $UserUPN `
-                            -AccessRights FullAccess `
-                            -Confirm:$false `
-                            -ErrorAction Stop
-                        $removed.Add("FullAccess on $($mbx.PrimarySmtpAddress)")
-                    }
+                $perms = @(Get-MailboxPermission -Identity $mbx.PrimarySmtpAddress -User $UserUPN -ErrorAction Stop)
+                if ($perms | Where-Object { $_.AccessRights -contains 'FullAccess' -and -not $_.IsInherited }) {
+                    $found.Add(@{ Kind = 'FullAccess'; Mailbox = $mbx.PrimarySmtpAddress; Label = "FullAccess on $($mbx.PrimarySmtpAddress)" })
                 }
             }
             catch {
-                Write-Verbose "Step-RemoveDelegatedAccess: FullAccess check suppressed for '$($mbx.PrimarySmtpAddress)' — $_"
+                $scanFailures.Add([string]$mbx.PrimarySmtpAddress)
             }
         }
     }
     catch {
-        $errors.Add("Shared mailbox scan failed: $_")
+        $errors.Add("Mailbox list for FullAccess scan failed: $_")
+    }
+    if ($scanFailures.Count -gt 0) {
+        $sample = ($scanFailures | Select-Object -First 5) -join ', '
+        $errors.Add("FullAccess check failed on $($scanFailures.Count) mailbox(es), verify manually: $sample$(if ($scanFailures.Count -gt 5) { ', …' })")
+    }
+
+    # ── What-If: describe changes without applying them ───────────────────────
+    if ($WhatIf) {
+        $parts = [System.Collections.Generic.List[string]]::new()
+        if ($found.Count -gt 0) { $parts.Add("Would remove $($found.Count) delegated permission(s): $($found.Label -join ', ')") }
+        else                    { $parts.Add("No delegated mailbox permissions found ($scanned mailboxes scanned)") }
+        if ($errors.Count -gt 0) { $parts.Add('ERRORS: ' + ($errors -join '; ')) }
+        $result.Status  = 'WhatIf'
+        $result.Message = $parts -join ' | '
+        return $result
+    }
+
+    # ── Remove ────────────────────────────────────────────────────────────────
+    foreach ($item in $found) {
+        try {
+            switch ($item.Kind) {
+                'SendAs' {
+                    Remove-RecipientPermission -Identity $item.Mailbox -Trustee $UserUPN -AccessRights SendAs `
+                        -Confirm:$false -ErrorAction Stop | Out-Null
+                }
+                'SendOnBehalf' {
+                    Set-Mailbox -Identity $item.Mailbox -GrantSendOnBehalfTo @{ Remove = $UserUPN } -ErrorAction Stop
+                }
+                'FullAccess' {
+                    Remove-MailboxPermission -Identity $item.Mailbox -User $UserUPN -AccessRights FullAccess `
+                        -Confirm:$false -ErrorAction Stop | Out-Null
+                }
+            }
+            $removed.Add($item.Label)
+        }
+        catch {
+            $errors.Add("$($item.Label): $_")
+        }
     }
 
     if ($removed.Count -eq 0 -and $errors.Count -eq 0) {
-        $result.Status  = 'Success'
-        $result.Message = 'No delegated mailbox permissions found for this user. Note: FullAccess scan covered shared mailboxes only — verify user mailboxes manually if required.'
+        $result.Status  = 'Skipped'
+        $result.Message = "No delegated mailbox permissions found ($scanned mailboxes scanned)"
         return $result
     }
 

@@ -9,6 +9,10 @@ function Start-M365UserOffboarding {
     .PARAMETER TenantId
         Tenant ID (GUID) to connect to. When set, sign-in is pinned to this tenant
         and the portal refuses to connect if Graph or Exchange land anywhere else.
+    .PARAMETER OutputPath
+        Folder for audit logs. Defaults to ~\M365UserOffboarding\Output\AuditLogs, which
+        is outside OneDrive so tenant data is not synced. Every step result is appended to
+        a CSV here as it happens; an HTML report can be generated when the portal closes.
     .PARAMETER Port
         Starting port for the portal server. Tries 8080–8089 if the preferred port
         is already in use.
@@ -23,6 +27,8 @@ function Start-M365UserOffboarding {
     param(
         [ValidatePattern('^[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$')]
         [string]$TenantId = '',
+
+        [string]$OutputPath = (Join-Path $HOME 'M365UserOffboarding' 'Output' 'AuditLogs'),
 
         [ValidateRange(1024, 65535)]
         [int]$Port = 8080
@@ -45,10 +51,18 @@ function Start-M365UserOffboarding {
     $script:TenantName       = ''
     $script:TenantId         = ''
     $script:ExpectedTenantId = $TenantId
+    $script:AuditDir         = $OutputPath
+    $script:AuditStamp       = Get-Date -Format 'yyyy-MM-dd_HHmmss'
     $script:ConnectedAs      = ''
     $script:HasIntuneLicense = $false
     $script:CsrfToken        = [System.Convert]::ToBase64String(
                                    [System.Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
+    Write-Host "  Audit log : $(Join-Path $OutputPath "OffboardingAudit_$($script:AuditStamp).csv")" -ForegroundColor DarkCyan
+    $oneDriveRoots = @($env:OneDrive, $env:OneDriveCommercial, $env:OneDriveConsumer) | Where-Object { $_ } | Select-Object -Unique
+    $fullOutput    = [System.IO.Path]::GetFullPath($OutputPath)
+    if ($oneDriveRoots | Where-Object { $fullOutput.StartsWith($_, [System.StringComparison]::OrdinalIgnoreCase) }) {
+        Write-Warning 'The audit log folder is inside OneDrive, so tenant data will be synced to the cloud. Use -OutputPath to choose another folder.'
+    }
     Write-Host ''
 
     # ── Launch portal ─────────────────────────────────────────────────────
@@ -66,7 +80,8 @@ function Start-M365UserOffboarding {
     # ── Prompt to export audit ─────────────────────────────────────────────
     if ($script:AuditLog.Count -gt 0) {
         Write-Host "$($script:AuditLog.Count) audit entries recorded." -ForegroundColor Yellow
-        $choice = Read-Host 'Export audit log to Output\AuditLogs\ ? [Y/n]'
+        Write-Host "CSV already saved to $(Join-Path $script:AuditDir "OffboardingAudit_$($script:AuditStamp).csv")" -ForegroundColor DarkCyan
+        $choice = Read-Host 'Also generate the HTML report? [Y/n]'
         if ($choice -ne 'n' -and $choice -ne 'N') {
             $null = Export-AuditLog   # Export-AuditLog prints the saved paths itself
         }
