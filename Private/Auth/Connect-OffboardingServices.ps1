@@ -42,19 +42,16 @@ function Connect-OffboardingServices {
     }
 
     $requiredScopes = @(
-        'User.Read.All'
         'User.ReadWrite.All'
         'Directory.ReadWrite.All'
         'Group.ReadWrite.All'
         'RoleManagement.ReadWrite.Directory'
         'DeviceManagementManagedDevices.ReadWrite.All'
         'UserAuthenticationMethod.ReadWrite.All'
-        'Sites.FullControl.All'
         'Files.ReadWrite.All'
         'MailboxSettings.ReadWrite'
         'TeamMember.ReadWrite.All'
         'Organization.Read.All'
-        'AuditLog.Read.All'
     )
 
     # ── Microsoft Graph ───────────────────────────────────────────────────────

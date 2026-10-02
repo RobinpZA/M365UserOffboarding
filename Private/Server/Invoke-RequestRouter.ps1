@@ -246,6 +246,10 @@ function Invoke-Route {
 
             '^/api/users/([^/?]+)$' {
                 $userId = $Matches[1]
+                if (-not [guid]::TryParse($userId, [ref][guid]::Empty)) {
+                    Write-ErrorResponse -Stream $stream -Message 'Invalid user ID' -StatusCode 400
+                    return
+                }
                 $result = Get-PortalUserDetails -UserId $userId
                 Write-JsonResponse -Stream $stream -Data $result
                 return
@@ -283,7 +287,7 @@ function Invoke-Route {
                 if ($method -ne 'POST') {
                     Write-ErrorResponse -Stream $stream -Message 'Method not allowed' -StatusCode 405; return
                 }
-                $exportPaths = Export-AuditLog -ModuleRoot $moduleRoot
+                $exportPaths = Export-AuditLog
                 # Export-AuditLog returns [htmlPath, csvPath]; send the HTML path to the browser.
                 $htmlPath = if ($exportPaths -is [array]) { $exportPaths[0] } else { $exportPaths }
                 Write-JsonResponse -Stream $stream -Data @{ filename = $htmlPath }

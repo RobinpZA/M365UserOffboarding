@@ -1,23 +1,25 @@
 function Export-AuditLog {
     <#
     .SYNOPSIS
-        Exports the current session audit log to HTML and CSV files in Output\AuditLogs\.
-    .PARAMETER ModuleRoot
-        Root path of the module (used to resolve Output directory).
+        Writes the session HTML report and rewrites the session CSV in the audit folder.
+    .PARAMETER OutputPath
+        Folder to write to. Defaults to the session audit folder set by Start-M365UserOffboarding.
     .OUTPUTS
         [string[]] Two paths, in order: the generated HTML file and the generated CSV file.
     #>
     [CmdletBinding()]
     param(
-        [string]$ModuleRoot = $script:ModuleRoot
+        [string]$OutputPath = $script:AuditDir
     )
 
-    $outDir   = Join-Path $ModuleRoot 'Output' 'AuditLogs'
+    $outDir   = $OutputPath
     if (-not (Test-Path $outDir)) {
         New-Item -Path $outDir -ItemType Directory -Force | Out-Null
     }
 
-    $timestamp = Get-Date -Format 'yyyy-MM-dd_HHmmss'
+    # Same stamp as the live CSV written by Write-AuditEntry, so both files pair up.
+    if (-not $script:AuditStamp) { $script:AuditStamp = Get-Date -Format 'yyyy-MM-dd_HHmmss' }
+    $timestamp = $script:AuditStamp
     $htmlPath  = Join-Path $outDir "OffboardingAudit_$timestamp.html"
     $csvPath   = Join-Path $outDir "OffboardingAudit_$timestamp.csv"
 

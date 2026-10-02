@@ -1,7 +1,12 @@
 function Step-CleanupPermissions {
     <#
     .SYNOPSIS
-        Removes the user from all admin roles, security groups, and Microsoft 365 groups.
+        Removes the user's admin roles (active and PIM-eligible) and group memberships.
+    .NOTES
+        Roles come from the unified role management API, so assignments scoped to an
+        administrative unit and PIM-eligible assignments are included — memberOf only
+        shows active tenant-wide roles. Removing roles needs Privileged Role Administrator.
+        Teams-connected groups are left to Step-RemoveTeamsAndDLs.
     #>
     [CmdletBinding()]
     param(
@@ -42,33 +47,105 @@ function Step-CleanupPermissions {
         return $result
     }
 
+    # ── Get role assignments (active and PIM-eligible) ────────────────────────
+    $roleFilter = '?$filter=principalId eq ''' + $UserId + '''&$expand=roleDefinition($select=displayName)'
+    $activeRoles = @()
+    try {
+        $resp        = Invoke-MgGraphRequest -Method GET -Uri ('/v1.0/roleManagement/directory/roleAssignments' + $roleFilter) -ErrorAction Stop
+        $activeRoles = @($resp.value)
+    }
+    catch {
+        $result.Status  = 'Error'
+        $result.Message = "Failed to retrieve role assignments: $_"
+        return $result
+    }
+
+    $eligibleRoles = @()
+    $pimNote       = ''
+    try {
+        $resp          = Invoke-MgGraphRequest -Method GET -Uri ('/v1.0/roleManagement/directory/roleEligibilitySchedules' + $roleFilter) -ErrorAction Stop
+        $eligibleRoles = @($resp.value)
+    }
+    catch {
+        $errFull = $_.Exception.Message + ' ' + ($_.ErrorDetails?.Message ?? '')
+        # Tenants without Entra ID P2 have no PIM, so there is nothing eligible to remove.
+        if ($errFull -notmatch 'AadPremiumLicenseRequired|PremiumLicense|P2') {
+            $pimNote = "Could not check PIM-eligible roles: $_"
+        }
+    }
+
+    $roleLabel = { param($r, $kind) "$($r.roleDefinition.displayName ?? $r.roleDefinitionId) ($kind$(if ($r.directoryScopeId -and $r.directoryScopeId -ne '/') { ', scoped' }))" }
+
     # ── What-If: describe changes without applying them ───────────────────────
     if ($WhatIf) {
-        $rolesFound  = @($memberships | Where-Object { $_.'@odata.type' -eq '#microsoft.graph.directoryRole' })
+        $rolesFound  = @($eligibleRoles | ForEach-Object { & $roleLabel $_ 'eligible' }) +
+                       @($activeRoles   | ForEach-Object { & $roleLabel $_ 'active' })
         $groupsFound = @($memberships | Where-Object {
             $_.'@odata.type' -eq '#microsoft.graph.group' -and
             ($_.resourceProvisioningOptions -notcontains 'Team')
         })
         $parts = [System.Collections.Generic.List[string]]::new()
-        if ($rolesFound.Count -gt 0)  { $parts.Add("$($rolesFound.Count) admin role(s) to remove: $($rolesFound.displayName -join ', ')") }
+        if ($rolesFound.Count -gt 0)  { $parts.Add("$($rolesFound.Count) admin role(s) to remove: $($rolesFound -join ', ')") }
         if ($groupsFound.Count -gt 0) { $parts.Add("$($groupsFound.Count) group(s) to remove") }
+        if ($pimNote)                 { $parts.Add($pimNote) }
         if ($parts.Count -eq 0)       { $parts.Add('No admin roles or non-Teams group memberships found') }
         $result.Status  = 'WhatIf'
         $result.Message = $parts -join '; '
         return $result
     }
 
-    # ── Remove from directory roles ───────────────────────────────────────────
-    $roles = @($memberships | Where-Object { $_.'@odata.type' -eq '#microsoft.graph.directoryRole' })
-    foreach ($role in $roles) {
+    if ($pimNote) { $errors.Add($pimNote) }
+
+    # ── Remove PIM-eligible roles first, so they cannot be activated meanwhile ─
+    foreach ($role in $eligibleRoles) {
+        $label = & $roleLabel $role 'eligible'
         try {
-            Invoke-MgGraphRequest -Method DELETE `
-                -Uri ('/v1.0/directoryRoles/' + $role.id + '/members/' + $UserId + '/$ref') `
-                -ErrorAction Stop
-            $rolesRemoved.Add($role.displayName)
+            $body = @{
+                action           = 'adminRemove'
+                principalId      = $UserId
+                roleDefinitionId = $role.roleDefinitionId
+                directoryScopeId = $role.directoryScopeId ?? '/'
+                justification    = 'User offboarding'
+            } | ConvertTo-Json -Compress
+            Invoke-MgGraphRequest -Method POST `
+                -Uri '/v1.0/roleManagement/directory/roleEligibilityScheduleRequests' `
+                -Body $body -ContentType 'application/json' -ErrorAction Stop | Out-Null
+            $rolesRemoved.Add($label)
         }
         catch {
-            $errors.Add("Role '$($role.displayName)': $_")
+            $errors.Add("Role $label`: $_")
+        }
+    }
+
+    # ── Remove active roles ───────────────────────────────────────────────────
+    # Permanent assignments delete directly; PIM-activated or time-bound ones refuse
+    # the DELETE and need an adminRemove schedule request instead.
+    foreach ($role in $activeRoles) {
+        $label = & $roleLabel $role 'active'
+        try {
+            Invoke-MgGraphRequest -Method DELETE `
+                -Uri ('/v1.0/roleManagement/directory/roleAssignments/' + $role.id) `
+                -ErrorAction Stop
+            $rolesRemoved.Add($label)
+        }
+        catch {
+            $deleteError = $_
+            try {
+                $body = @{
+                    action           = 'adminRemove'
+                    principalId      = $UserId
+                    roleDefinitionId = $role.roleDefinitionId
+                    directoryScopeId = $role.directoryScopeId ?? '/'
+                    justification    = 'User offboarding'
+                } | ConvertTo-Json -Compress
+                Invoke-MgGraphRequest -Method POST `
+                    -Uri '/v1.0/roleManagement/directory/roleAssignmentScheduleRequests' `
+                    -Body $body -ContentType 'application/json' -ErrorAction Stop | Out-Null
+                $rolesRemoved.Add($label)
+            }
+            catch {
+                $errors.Add("Role $label`: $deleteError")
+            }
         }
     }
 
