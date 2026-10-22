@@ -3,8 +3,8 @@
     ModuleVersion     = '1.1.0'
     GUID              = 'b7f3a1d2-4e5c-4a8b-9c6d-2f1e3d5a7b9c'
     Author            = 'Robin Pieterse'
-    CompanyName       = 'Turrito Networks'
-    Copyright         = '(c) 2026 Robin Pieterse · Turrito. Licensed under the MIT License.'
+    CompanyName       = 'Robin Pieterse'
+    Copyright         = '(c) 2026 Robin Pieterse. Licensed under the MIT License.'
     Description       = 'Interactive Microsoft 365 user offboarding portal. Launches a local web portal for managing the complete offboarding workflow: sign-in block, session revocation, shared mailbox conversion, out-of-office, Intune device wipe, licence removal, permissions cleanup, OneDrive transfer, Teams/DL removal, delegated mailbox access removal, and MFA reset.'
     PowerShellVersion = '7.2'
 
